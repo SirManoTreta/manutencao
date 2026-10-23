@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% block content %}
+<div id="tickets-page" data-status="{{ status }}" data-threshold="{{ threshold }}"></div>
+
+<div class="page-header">
+  <div>
+    <h1>Chamados</h1>
+    <p>Painel de chamados do Professor com lista principal e monitoramento de máquinas online.</p>
+    <p class="small text-muted mb-0">
+      <span id="ws-status">Conectando ao tempo real…</span>
+      · Online = ping em até {{ threshold }}s.
+      · Horário: Brasília (UTC-3).
+    </p>
+  </div>
+  <div class="page-actions">
+    <a class="btn {% if status == 'OPEN' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="/tickets?status=OPEN">Aguardando</a>
+    <a class="btn {% if status == 'IN_PROGRESS' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="/tickets?status=IN_PROGRESS">Em atendimento</a>
+    <a class="btn {% if status == 'CLOSED' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="/tickets?status=CLOSED">Fechados</a>
+    <a class="btn {% if status == 'ALL' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="/tickets?status=ALL">Todos</a>
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-8">
+    <section class="panel">
+      <div class="panel-head"><h3>Lista de chamados</h3></div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Hora</th>
+              <th>Computador</th>
+              <th>Sala</th>
+              <th>Problema</th>
+              <th>Usuário</th>
+              <th>Status</th>
+              <th>Ação</th>
+            </tr>
+          </thead>
+          <tbody id="tickets-body">
+            {% for t in tickets %}
+            <tr>
+              <td>{{ t.created_at|time_br }}</td>
+              <td>
+                {% if t.machine %}
+                  <a href="/machines/{{ t.machine.id }}">{{ t.pc_name }}</a>
+                {% else %}
+                  {{ t.pc_name }} <span class="badge warning ms-1">não cadastrado</span>
+                {% endif %}
+              </td>
+              <td>{{ t.machine.room_name if t.machine else '-' }}</td>
+              <td style="max-width:360px;">
+                <div class="fw-semibold">{{ t.problem }}</div>
+                {% if t.diagnostics_json %}
+                <details class="small text-muted mt-1">
+                  <summary>diagnóstico</summary>
+                  <pre class="m-0">{{ t.diagnostics_json }}</pre>
+                </details>
+                {% endif %}
+              </td>
+              <td>{{ t.reported_user or '-' }}</td>
+              <td>
+                {% if t.status == 'OPEN' %}
+                  <span class="badge danger">AGUARDANDO</span>
+                {% elif t.status == 'IN_PROGRESS' %}
+                  <span class="badge info">EM ATENDIMENTO</span>
+                  <div class="small text-muted mt-1">
+                    {{ t.assigned_by or '' }}{% if t.assigned_at %} · {{ t.assigned_at|time_br }}{% endif %}
+                  </div>
+                {% else %}
+                  <span class="badge success">FECHADO</span>
+                  <div class="small text-muted mt-1">
+                    {{ t.closed_by or '' }}{% if t.closed_at %} · {{ t.closed_at|time_br }}{% endif %}
+                  </div>
+                {% endif %}
+              </td>
+              <td>
+                {% if t.status == 'OPEN' %}
+                <form method="post" action="/tickets/{{ t.id }}/take">
+                  <button class="btn btn-sm btn-primary" type="submit">Atender o Chamado</button>
+                </form>
+                {% elif t.status == 'IN_PROGRESS' %}
+                <form method="post" action="/tickets/{{ t.id }}/close">
+                  <button class="btn btn-sm btn-outline-success" type="submit">Fechar</button>
+                </form>
+                {% endif %}
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="7" class="text-center text-muted py-4">Nenhum chamado encontrado.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <div class="col-lg-4">
+    <section class="panel">
+      <div class="panel-head"><h3>Computadores online</h3></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>PC</th><th>Último ping</th><th>Login</th></tr></thead>
+          <tbody id="online-body">
+            {% for row in online %}
+            <tr>
+              <td>
+                {% if row.hb.machine %}
+                  <a href="/machines/{{ row.hb.machine.id }}">{{ row.hb.pc_name }}</a>
+                  <div class="small text-muted">{{ row.hb.machine.room_name }}</div>
+                {% else %}
+                  {{ row.hb.pc_name }}<div class="small text-muted">(não cadastrado)</div>
+                {% endif %}
+              </td>
+              <td>
+                {% if row.is_online %}
+                  <span class="badge success">ONLINE</span>
+                {% else %}
+                  <span class="badge secondary">OFFLINE</span>
+                {% endif %}
+                <div class="small text-muted mt-1">{{ row.age_seconds }}s atrás</div>
+              </td>
+              <td>
+                {% if row.hb.last_user %}
+                  <span class="badge info">👤 {{ row.hb.last_user }}</span>
+                {% else %}
+                  <span class="badge secondary">🔒 sem login</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="3" class="text-center text-muted py-4">Ainda não recebi ping de nenhum PC.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/tickets_live.js"></script>
+{% endblock %}

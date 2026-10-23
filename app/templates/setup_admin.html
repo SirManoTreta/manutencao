@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="login-shell">
+  <div class="login-card">
+    <div class="login-brand"><div class="brand-badge">TI</div><div><strong>Manutenção</strong><span>Configuração inicial</span></div></div>
+    <div class="page-header mb-4"><div><h1>Configuração inicial</h1><p>Crie o usuário administrador para começar.</p></div></div>
+    <form method="post" action="/setup">
+      <div class="mb-3"><label class="form-label">Usuário (admin)</label><input class="form-control" name="username" required></div>
+      <div class="mb-3"><label class="form-label">Senha</label><input class="form-control" type="password" name="password" required></div>
+      <button class="btn btn-primary w-100" type="submit">Criar admin e entrar</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

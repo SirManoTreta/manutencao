@@ -1,0 +1,8 @@
+{
+  "name": "Manutenção TI",
+  "short_name": "Manutenção",
+  "start_url": "/machines",
+  "display": "standalone",
+  "background_color": "#212529",
+  "theme_color": "#212529"
+}

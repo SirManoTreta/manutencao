@@ -1,0 +1,282 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+  <div>
+    {% set who = (machine.updated_by or machine.created_by or "-") %}
+    <h1>{{ machine.machine_name }}</h1>
+    <p>{{ machine.room_name }} · {{ machine.ip }} · {{ machine.username }} · Perfil {{ machine.profile }} · Responsável visual: {{ who }}</p>
+    <p class="small text-muted mb-0">Criado por <strong>{{ machine.created_by or "-" }}</strong> em {{ machine.created_at|dt_br }} (BRT) · Última alteração por <strong>{{ machine.updated_by or machine.created_by or "-" }}</strong> em {{ machine.updated_at|dt_br }} (BRT)</p>
+  </div>
+  <div class="page-actions">
+    <a class="btn btn-primary" href="/machines/{{ machine.id }}/edit">Editar</a>
+    <form method="post" action="/machines/{{ machine.id }}/delete" onsubmit="return confirm('Excluir esta máquina?');">
+      <button class="btn btn-outline-danger" type="submit">Excluir</button>
+    </form>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-12 col-lg-7">
+    <div class="panel">
+      <div class="panel-head"><h3>Periféricos</h3></div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-sm mb-0 align-middle">
+            <thead class="table-light">
+              <tr>
+                <th>Item</th>
+                <th class="text-center">Presente</th>
+                <th class="text-center">Testado e funcionando</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for p in peripherals %}
+                {% set obj = per_map.get(p.code) %}
+                <tr>
+                  <td>{{ p.label }}</td>
+                  <td class="text-center">
+                    {% if p.has_quantity %}
+                      {% set qty = (obj.quantity if obj else 0) %}
+                      {% if qty and qty > 0 %}
+                        <span class="badge text-bg-success">{{ qty }}</span>
+                      {% else %}
+                        <span class="badge text-bg-secondary">0</span>
+                      {% endif %}
+                    {% else %}
+                      {% if obj and obj.present %}
+                        <span class="badge text-bg-success">Sim</span>
+                      {% else %}
+                        <span class="badge text-bg-secondary">Não</span>
+                      {% endif %}
+                    {% endif %}
+                  </td>
+                  <td class="text-center">
+                    {% if obj and obj.present and obj.tested_working %}
+                      <span class="badge text-bg-success">OK</span>
+                    {% elif obj and obj.present and (not obj.tested_working) %}
+                      <span class="badge text-bg-warning">Não testado/Não OK</span>
+                    {% else %}
+                      <span class="badge text-bg-secondary">N/A</span>
+                    {% endif %}
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {% if machine.profile == 'A' %}
+        <div class="border-top p-2 small d-flex justify-content-between">
+          <span class="text-muted">Horas lâmpada do projetor</span>
+          <span>{{ machine.projector_lamp_hours if machine.projector_lamp_hours is not none else "-" }}</span>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="col-12 col-lg-5">
+    <div class="panel mb-3">
+      <div class="panel-head"><h3>Vistoria</h3></div>
+      <div class="card-body">
+        <div class="d-flex justify-content-between">
+          <div class="text-muted">Vistoriado e testado</div>
+          <div>
+            {% if machine.inspected %}
+              <span class="badge text-bg-success">Sim</span>
+            {% else %}
+              <span class="badge text-bg-secondary">Não</span>
+            {% endif %}
+          </div>
+        </div>
+        <hr>
+        <div class="d-flex justify-content-between">
+          <div class="text-muted">Última vistoria</div>
+          <div>{{ machine.last_inspection_date.isoformat() if machine.last_inspection_date else "-" }}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel mb-3">
+      <div class="panel-head"><h3>Checkup</h3></div>
+      <div class="card-body">
+        <div class="d-flex justify-content-between">
+          <div class="text-muted">Checkup realizado</div>
+          <div>
+            {% if machine.checkup_done %}
+              <span class="badge text-bg-success">Sim</span>
+            {% else %}
+              <span class="badge text-bg-secondary">Não</span>
+            {% endif %}
+          </div>
+        </div>
+        <hr>
+        <div class="d-flex justify-content-between">
+          <div class="text-muted">Último checkup</div>
+          <div>{{ machine.last_checkup_date.isoformat() if machine.last_checkup_date else "-" }}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel mb-3">
+      <div class="panel-head"><h3>Acesso remoto / Rede</h3></div>
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center">
+          <div class="small"><span class="text-muted">HopToDesk ID:</span>
+            <span id="hopId" data-value="{{ (machine.hoptodesk_id or '')|e }}">{{ machine.hoptodesk_id or "-" }}</span>
+          </div>
+          {% if machine.hoptodesk_id %}
+            <button class="btn btn-sm btn-outline-secondary" type="button" onclick="copyFrom('hopId')">Copiar</button>
+          {% endif %}
+        </div>
+
+        <hr>
+
+        <div class="d-flex justify-content-between align-items-center">
+          <div class="small"><span class="text-muted">Senha:</span>
+            <span id="hopPass" data-value="{{ (machine.hoptodesk_password or '')|e }}">{% if machine.hoptodesk_password %}••••••••{% else %}-{% endif %}</span>
+          </div>
+          {% if machine.hoptodesk_password %}
+            <div class="btn-group">
+              <button class="btn btn-sm btn-outline-secondary" type="button" id="toggleHopPassDetail" onclick="toggleHopPass()">Mostrar</button>
+              <button class="btn btn-sm btn-outline-secondary" type="button" onclick="copyFrom('hopPass')">Copiar</button>
+            </div>
+          {% endif %}
+        </div>
+
+        <hr>
+
+        <div class="d-flex justify-content-between align-items-center">
+          <div class="small"><span class="text-muted">MAC:</span>
+            <span id="macAddr" data-value="{{ (machine.mac_address or '')|e }}">{{ machine.mac_address or "-" }}</span>
+          </div>
+          {% if machine.mac_address %}
+            <button class="btn btn-sm btn-outline-secondary" type="button" onclick="copyFrom('macAddr')">Copiar</button>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="panel mb-3">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span>Hardware / Software</span>
+    <button class="btn btn-sm btn-outline-secondary"
+            type="button"
+            data-bs-toggle="collapse"
+            data-bs-target="#extraInfoDetail"
+            aria-expanded="false"
+            aria-controls="extraInfoDetail">▸</button>
+  </div>
+
+  <div class="collapse" id="extraInfoDetail">
+    <div class="card-body">
+      <div class="row g-2 small">
+        <div class="col-12 col-md-6"><span class="text-muted">SO:</span> {{ machine.os_name or "-" }}</div>
+        <div class="col-12 col-md-6"><span class="text-muted">GPU:</span> {{ machine.gpu_type or "-" }}</div>
+
+        <div class="col-12 col-md-6"><span class="text-muted">RAM (GB):</span> {{ machine.ram_gb if machine.ram_gb is not none else "-" }}</div>
+        <div class="col-12 col-md-6"><span class="text-muted">Módulos RAM:</span> {{ machine.ram_modules if machine.ram_modules is not none else "-" }}</div>
+
+        <div class="col-12"><span class="text-muted">Processador:</span> {{ machine.cpu_model or "-" }}</div>
+
+        <div class="col-12 col-md-6"><span class="text-muted">Armazenamento:</span> {{ machine.storage_type or "-" }}</div>
+        <div class="col-12 col-md-6"><span class="text-muted">Armazenamento (GB):</span> {{ machine.storage_gb if machine.storage_gb is not none else "-" }}</div>
+
+        <div class="col-12 col-md-6"><span class="text-muted">Office instalado:</span> {{ "Sim" if machine.office_installed else "Não" }}</div>
+        <div class="col-12 col-md-6"><span class="text-muted">Versão Office:</span> {{ machine.office_version or "-" }}</div>
+
+        <div class="col-12 col-md-6"><span class="text-muted">Kaspersky instalado:</span> {{ "Sim" if machine.kaspersky_installed else "Não" }}</div>
+        <div class="col-12 col-md-6"><span class="text-muted">Kaspersky atualizado:</span> {{ "Sim" if machine.kaspersky_updated else "Não" }}</div>
+
+        <div class="col-12 col-md-6"><span class="text-muted">Qtd. portas USB:</span> {{ machine.usb_ports_qty if machine.usb_ports_qty is not none else "-" }}</div>
+        <div class="col-12 col-md-6"><span class="text-muted">USB funcionando:</span> {{ "Sim" if machine.usb_ports_working else "Não" }}</div>
+
+        <div class="col-12"><span class="text-muted">Adaptadores:</span> {{ machine.adapters or "-" }}</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+    <div class="panel">
+      <div class="panel-head"><h3>Situação / Manutenção</h3></div>
+      <div class="card-body">
+        {% if machine.maintenance_description %}
+          <pre class="mb-0 pre-wrap">{{ machine.maintenance_description }}</pre>
+        {% else %}
+          <div class="text-muted">Sem descrição.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  function _toastMini(message) {
+    const container = document.getElementById("toast-container");
+    if (!container) return;
+
+    const el = document.createElement("div");
+    el.className = "toast-mini";
+    el.innerHTML = `
+      <div class="toast-mini__title">Copiar</div>
+      <div class="toast-mini__body"></div>
+    `;
+    el.querySelector(".toast-mini__body").textContent = message;
+    container.appendChild(el);
+
+    window.setTimeout(() => {
+      el.classList.add("toast-mini--hide");
+      window.setTimeout(() => el.remove(), 250);
+    }, 1800);
+  }
+
+  async function copyFrom(id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+
+    const val = (el.dataset.value || el.textContent || "").trim();
+    if (!val) return;
+
+    // 1) Tenta Clipboard API (melhor experiência). Em HTTP por IP (celular), pode falhar por "insecure context".
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(val);
+        _toastMini("Copiado ✅");
+        return;
+      }
+    } catch (_) {
+      // cai no fallback
+    }
+
+    // 2) Fallback clássico (funciona em mais cenários)
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = val;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.top = "-1000px";
+      ta.style.left = "-1000px";
+      document.body.appendChild(ta);
+      ta.select();
+      ta.setSelectionRange(0, ta.value.length);
+      const ok = document.execCommand("copy");
+      document.body.removeChild(ta);
+      _toastMini(ok ? "Copiado ✅" : "Não consegui copiar automaticamente");
+    } catch (_) {
+      _toastMini("Não consegui copiar automaticamente");
+    }
+  }
+
+  function toggleHopPass() {
+    const el = document.getElementById('hopPass');
+    const btn = document.getElementById('toggleHopPassDetail');
+    if (!el || !btn) return;
+    const current = el.textContent || '';
+    const real = el.dataset.value || '';
+    const isHidden = current.includes('•');
+    el.textContent = isHidden ? real : '••••••••';
+    btn.textContent = isHidden ? 'Ocultar' : 'Mostrar';
+  }
+</script>
+{% endblock %}

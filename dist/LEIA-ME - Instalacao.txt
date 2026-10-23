@@ -1,0 +1,98 @@
+==========================================================================
+  MONITOR DE TI - MANUTENCAO  (instalacao nos PCs dos professores)
+==========================================================================
+
+O QUE TEM NESTA PASTA
+--------------------------------------------------------------------------
+  Relatar Problema - TI.exe   -> Janela do professor para abrir chamados.
+                                 Manda "estou online" para o painel da TI.
+                                 NAO fecha pelo X / Alt+F4 (so minimiza).
+
+  TI Watchdog.exe             -> Vigia: se a janela acima for fechada pelo
+                                 Gerenciador de Tarefas, reabre em segundos.
+
+  TI Heartbeat.exe            -> Sinal "online" que roda desde que o PC liga
+                                 (antes do login). Faz a maquina aparecer no
+                                 painel ja na tela de login e informa se tem
+                                 alguem logado ou nao.
+
+  instalar_inicializacao.bat     -> Liga o inicio automatico NO LOGON
+                                    (watchdog + janela do professor).
+  instalar_heartbeat_boot.bat    -> Liga o sinal "online" NO BOOT (como SYSTEM,
+                                    antes do login).
+  desinstalar_inicializacao.bat  -> Desliga o inicio no logon.
+  desinstalar_heartbeat_boot.bat -> Desliga o sinal de boot.
+
+
+COMO INSTALAR (faca em cada PC)
+--------------------------------------------------------------------------
+  1) Copie esta pasta INTEIRA para um lugar fixo do PC. Sugestao:
+        C:\TI\Monitor\
+     (Evite Area de Trabalho / Downloads - se apagarem a pasta, para de
+      funcionar. Use um caminho que o professor nao mexa.)
+
+  2) De 2 cliques em:  instalar_inicializacao.bat
+        -> Vai pedir permissao de administrador (clique "Sim").
+        -> Pronto: no proximo logon a janela abre sozinha e se mantem aberta.
+
+  3) De 2 cliques em:  instalar_heartbeat_boot.bat
+        -> Pede administrador (clique "Sim").
+        -> Pronto: o PC passa a aparecer "online" no painel ja na tela de
+           login, mesmo sem ninguem logado.
+
+  4) (Opcional) Para ver funcionando agora, sem reiniciar:
+        - de 2 cliques em "Relatar Problema - TI.exe", ou
+        - reinicie o PC.
+
+
+COMO USAR (professor)
+--------------------------------------------------------------------------
+  - A janela "Relatar Problema" fica disponivel. Para abrir um chamado,
+    clique no botao do problema (ex.: "Sem internet", "Projetor sem imagem").
+  - Botao X e Alt+F4 NAO fecham: apenas minimizam (o monitoramento continua).
+  - Emergencia: Ctrl+Shift+E envia um chamado de "tela travada".
+
+
+COMO FECHAR DE VERDADE (somente TI)
+--------------------------------------------------------------------------
+  - Atalho:  Ctrl + Shift + Q   (fecha a janela do professor)
+  - Para parar tudo de vez (inclusive o reinicio automatico), rode:
+        desinstalar_inicializacao.bat
+        desinstalar_heartbeat_boot.bat
+    e depois feche os programas pelo Gerenciador de Tarefas, se preciso.
+
+
+PAINEL DA TI (o que aparece)
+--------------------------------------------------------------------------
+  Na tela "Chamados" do site, no quadro "Computadores online":
+     ONLINE / OFFLINE  -> se o PC mandou sinal recentemente.
+     Coluna "Login":
+        (cadeado) sem login  -> PC ligado, na tela de login (ninguem entrou).
+        (pessoa)  <usuario>  -> tem esse usuario logado no PC.
+
+
+REDE / DESCOBERTA DO SERVIDOR
+--------------------------------------------------------------------------
+  Os programas acham o servidor sozinhos na rede (broadcast + varredura).
+  Se a rede for "teimosa" e nao acharem, da para fixar o IP do servidor
+  criando uma variavel de ambiente do sistema (em cada PC):
+        CHAMADOS_SERVER = 10.0.0.60     (troque pelo IP do servidor)
+  Outras variaveis (opcionais): CHAMADOS_PORT (padrao 5050),
+  HEARTBEAT_INTERVAL (padrao 15s).
+
+
+PERGUNTAS COMUNS
+--------------------------------------------------------------------------
+  - "O antivirus reclamou do .exe": e falso positivo comum de programas
+    empacotados. Libere/adicione excecao para a pasta C:\TI\Monitor.
+
+  - "A janela nao abre antes do login": correto. A JANELA so aparece depois
+    do login (Windows nao mostra janelas antes de logar). O que roda antes
+    do login e so o sinal "online" (TI Heartbeat), sem janela.
+
+  - "Ctrl+Shift+Q nao fechou": com a janela em foco sempre funciona. O modo
+    global (sem foco) pode precisar que o programa rode como administrador.
+
+  - "Mudei a pasta de lugar": rode de novo os desinstalar_*.bat na pasta
+    antiga e os instalar_*.bat na pasta nova.
+==========================================================================

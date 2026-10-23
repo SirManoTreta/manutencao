@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Dashboard</h1>
+    <p>Resumo geral do ambiente, com indicadores rápidos para acompanhamento do parque e dos chamados.</p>
+  </div>
+  <div class="page-actions">
+    <a class="btn btn-outline-secondary" href="/machines">Ver máquinas</a>
+    <a class="btn btn-primary" href="/machines/new">Adicionar máquina</a>
+  </div>
+</div>
+
+<div class="metric-grid metric-grid-dashboard">
+  <div class="metric-card">
+    <span>Máquinas cadastradas</span>
+    <strong>{{ total_machines }}</strong>
+    <small>{{ rooms_count }} salas mapeadas</small>
+  </div>
+  <div class="metric-card info">
+    <span>Chamados abertos</span>
+    <strong>{{ open_tickets }}</strong>
+    <small>{{ in_progress_tickets }} em atendimento · {{ closed_tickets }} fechados</small>
+  </div>
+  <div class="metric-card warning">
+    <span>Salas em atenção</span>
+    <strong>{{ attention_rooms + urgent_rooms }}</strong>
+    <small>{{ urgent_rooms }} com urgência</small>
+  </div>
+  <div class="metric-card danger">
+    <span>Computadores online</span>
+    <strong>{{ online_count }}</strong>
+    <small>{{ total_heartbeats }} monitorados</small>
+  </div>
+  <div class="metric-card pending">
+    <span>Pendentes para vistoria</span>
+    <strong>{{ pending_inspections }}</strong>
+    <small>{{ total_machines - pending_inspections }} vistoriadas</small>
+  </div>
+  <div class="metric-card pending">
+    <span>Pendentes para checkup</span>
+    <strong>{{ pending_checkups }}</strong>
+    <small>{{ total_machines - pending_checkups }} em dia</small>
+  </div>
+</div>
+
+<div class="dashboard-grid">
+  <section class="panel">
+    <div class="panel-head">
+      <h3>Situação das máquinas</h3>
+      <span class="kpi-sub">Distribuição por status</span>
+    </div>
+    <div class="segment-mini-list">
+      {% for item in status_rows %}
+      <div class="segment-mini-row">
+        <strong>{{ item.label }}</strong>
+        <div class="progress"><span style="width: {{ item.percent }}%"></span></div>
+        <span class="activity-meta">{{ item.count }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h3>Distribuição por perfil</h3>
+      <span class="kpi-sub">Recorte rápido</span>
+    </div>
+    <div class="segment-mini-list">
+      {% for item in profile_rows %}
+      <div class="segment-mini-row">
+        <strong>{{ item.label }}</strong>
+        <div class="progress"><span style="width: {{ item.percent }}%"></span></div>
+        <span class="activity-meta">{{ item.count }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+</div>
+
+<div class="dashboard-grid dashboard-grid-equal">
+  <section class="panel">
+    <div class="panel-head">
+      <h3>Segmentos</h3>
+      <span class="kpi-sub">Classificação automática</span>
+    </div>
+    <div class="segment-mini-list">
+      {% for item in segment_rows %}
+      <div class="segment-mini-row segment-mini-row-wide">
+        <strong>{{ item.label }}</strong>
+        <div class="progress"><span style="width: {{ item.percent }}%"></span></div>
+        <span class="activity-meta">{{ item.count }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h3>Últimas alterações</h3>
+      <span class="kpi-sub">Últimos 5 registros</span>
+    </div>
+    {% if recent_machines %}
+      <div>
+        {% for m in recent_machines %}
+        <div class="activity-item">
+          <div>
+            <strong>{{ m.machine_name }}</strong>
+            <div class="activity-meta">{{ m.room_name }} · {{ m.updated_by or m.created_by or 'sem usuário' }}</div>
+          </div>
+          <div class="text-end">
+            <div>
+              {% if m.room_status == 'OK' %}<span class="badge success">OK</span>{% elif m.room_status == 'ATTENTION' %}<span class="badge warning">Atenção</span>{% else %}<span class="badge danger">Urgente</span>{% endif %}
+            </div>
+            <div class="activity-meta mt-1">{% if m.updated_at %}{{ m.updated_at|datetime_br }}{% elif m.created_at %}{{ m.created_at|datetime_br }}{% else %}-{% endif %}</div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty-state">Sem registros recentes.</div>
+    {% endif %}
+  </section>
+</div>
+
+<div class="content-grid two-fixed dashboard-bottom-grid">
+  <section class="panel">
+    <div class="panel-head">
+      <h3>Chamados recentes</h3>
+      <a href="/tickets">Abrir chamados</a>
+    </div>
+    {% if recent_tickets %}
+      <div>
+        {% for t in recent_tickets %}
+        <div class="activity-item">
+          <div>
+            <strong>{{ t.pc_name or 'Máquina sem identificação' }}</strong>
+            <div class="activity-meta">{{ t.problem }}</div>
+          </div>
+          <div class="text-end">
+            <div>
+              {% if t.status == 'OPEN' %}
+                <span class="badge warning">Aberto</span>
+              {% elif t.status == 'IN_PROGRESS' %}
+                <span class="badge info">Em atendimento</span>
+              {% else %}
+                <span class="badge success">Fechado</span>
+              {% endif %}
+            </div>
+            <div class="activity-meta mt-1">{% if t.created_at %}{{ t.created_at|datetime_br }}{% else %}-{% endif %}</div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty-state">Nenhum chamado encontrado.</div>
+    {% endif %}
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h3>Ações rápidas</h3>
+      <span class="kpi-sub">Atalhos principais</span>
+    </div>
+    <div class="quick-links-grid">
+      <a class="quick-link-card" href="/machines">
+        <strong>Máquinas</strong>
+        <span>Consultar inventário e aplicar filtros.</span>
+      </a>
+      <a class="quick-link-card" href="/rooms">
+        <strong>Salas</strong>
+        <span>Ver o status consolidado por ambiente.</span>
+      </a>
+      <a class="quick-link-card" href="/tickets">
+        <strong>Chamados</strong>
+        <span>Acompanhar solicitações abertas e fechadas.</span>
+      </a>
+      {% if request.state.user.is_admin %}
+      <a class="quick-link-card" href="/users">
+        <strong>Usuários</strong>
+        <span>Gerenciar acesso de operadores e admins.</span>
+      </a>
+      {% else %}
+      <a class="quick-link-card" href="/reports/relatorio.xlsm">
+        <strong>Relatório</strong>
+        <span>Baixar a planilha atual com os dados do sistema.</span>
+      </a>
+      {% endif %}
+    </div>
+  </section>
+</div>
+{% endblock %}

@@ -1,0 +1,1 @@
+netsh advfirewall firewall add rule name="Uvicorn/FastAPI 8000" dir=in action=allow protocol=TCP localport=8000

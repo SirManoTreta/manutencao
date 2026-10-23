@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block content %}
+<div id="new-ticket-banner" class="alert alert-warning py-2 d-none"><strong>Novo chamado recebido.</strong> <a class="alert-link" href="/tickets">Abrir chamados</a></div>
+
+<div class="page-header">
+  <div>
+    <h1>Máquinas</h1>
+    <p>Listagem principal com filtros, status e acesso rápido aos detalhes.</p>
+  </div>
+  <div class="page-actions">
+    {% if q or profile or segment or inspected or checkup or room_status %}<a class="btn btn-outline-secondary" href="/machines">Limpar filtros</a>{% endif %}
+    <a class="btn btn-outline-secondary" href="/dashboard">Ver dashboard</a>
+    <a class="btn btn-primary" href="/machines/new">Adicionar máquina</a>
+  </div>
+</div>
+
+<form class="panel filters-panel" method="get" action="/machines">
+  <div class="filters-row">
+    <div class="search-wrap"><label class="form-label">Busca</label><input class="form-control" type="search" name="q" placeholder="Nome, sala, IP, usuário, HopToDesk, MAC" value="{{ q }}"></div>
+    <div><label class="form-label">Perfil</label><select class="form-select" name="profile"><option value="" {% if not profile %}selected{% endif %}>Todos</option><option value="A" {% if profile=='A' %}selected{% endif %}>Perfil A</option><option value="B" {% if profile=='B' %}selected{% endif %}>Perfil B</option><option value="C" {% if profile=='C' %}selected{% endif %}>Perfil C</option></select></div>
+    <div><label class="form-label">Segmento</label><select class="form-select" name="segment"><option value="" {% if not segment %}selected{% endif %}>Todos</option><option value="INFANTIL" {% if segment=='INFANTIL' %}selected{% endif %}>Infantil</option><option value="FUND1" {% if segment=='FUND1' %}selected{% endif %}>Fundamental 1</option><option value="FUND2" {% if segment=='FUND2' %}selected{% endif %}>Fundamental 2</option><option value="EM" {% if segment=='EM' %}selected{% endif %}>Ensino Médio</option><option value="ADMIN" {% if segment=='ADMIN' %}selected{% endif %}>Administrativo</option><option value="OUTRO" {% if segment=='OUTRO' %}selected{% endif %}>Outros</option></select></div>
+    <div><label class="form-label">Vistoria</label><select class="form-select" name="inspected"><option value="" {% if not inspected %}selected{% endif %}>Todas</option><option value="1" {% if inspected in ['1','true','sim'] %}selected{% endif %}>Vistoriado</option><option value="0" {% if inspected in ['0','false','nao','não'] %}selected{% endif %}>Pendente</option></select></div>
+    <div><label class="form-label">Checkup</label><select class="form-select" name="checkup"><option value="" {% if not checkup %}selected{% endif %}>Todos</option><option value="1" {% if checkup in ['1','true','sim'] %}selected{% endif %}>Feito</option><option value="0" {% if checkup in ['0','false','nao','não'] %}selected{% endif %}>Pendente</option></select></div>
+  </div>
+  <div class="mt-3"><button class="btn btn-primary" type="submit">Aplicar filtros</button></div>
+</form>
+
+{% if machines|length == 0 %}
+  <div class="panel empty-state">Nenhuma máquina cadastrada.</div>
+{% else %}
+  <section class="panel">
+    <div class="panel-head"><h3>Resultado da busca</h3><a href="/rooms">Ver salas</a></div>
+    <div class="table-wrap"><table><thead><tr><th>Sala</th><th>Máquina</th><th>IP</th><th>Usuário</th><th>Perfil</th><th>Status</th><th>Vistoria</th><th>Ação</th></tr></thead><tbody>
+    {% for m in machines %}
+      <tr>
+        <td>{{ m.room_name }}</td>
+        <td><strong>{{ m.machine_name }}</strong><div class="small text-muted">{{ m.updated_by or m.created_by or '-' }}</div></td>
+        <td>{{ m.ip }}</td>
+        <td>{{ m.username }}</td>
+        <td>{{ m.profile }}</td>
+        <td>{% if m.room_status == 'OK' %}<span class="badge success">OK</span>{% elif m.room_status == 'ATTENTION' %}<span class="badge warning">Atenção</span>{% else %}<span class="badge danger">Urgente</span>{% endif %}</td>
+        <td>{% if m.last_inspection_date %}{{ m.last_inspection_date|date_br }}{% else %}-{% endif %}{% if m.inspected %}<div><span class="badge success mt-1">vistoriado</span></div>{% else %}<div><span class="badge secondary mt-1">pendente</span></div>{% endif %}</td>
+        <td><a class="table-link" href="/machines/{{ m.id }}">Detalhar</a></td>
+      </tr>
+    {% endfor %}
+    </tbody></table></div>
+  </section>
+{% endif %}
+{% endblock %}

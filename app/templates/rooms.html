@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header"><div><h1>Salas</h1><p>Painel consolidado de status por sala, em um visual mais próximo do protótipo.</p></div></div>
+{% if rooms|length == 0 %}
+  <div class="panel empty-state">Nenhuma sala encontrada.</div>
+{% else %}
+<section class="panel"><div class="panel-head"><h3>Status das salas</h3><a href="/machines">Voltar para máquinas</a></div><div class="table-wrap"><table><thead><tr><th>Sala</th><th>Status atual</th><th>Atualizar</th></tr></thead><tbody>{% for r in rooms %}<tr><td><strong>{{ r.room_name }}</strong></td><td>{% if r.room_status == 'OK' %}<span class="badge success">Verde · Tudo OK</span>{% elif r.room_status == 'ATTENTION' %}<span class="badge warning">Amarelo · Requer atenção</span>{% else %}<span class="badge danger">Vermelho · Atenção urgente</span>{% endif %}</td><td><form class="d-flex gap-2 align-items-center" method="post" action="/rooms/update"><input type="hidden" name="room_name" value="{{ r.room_name }}"><select class="form-select form-select-sm" name="room_status" style="max-width:280px;"><option value="OK" {% if r.room_status=='OK' %}selected{% endif %}>Verde · Tudo OK</option><option value="ATTENTION" {% if r.room_status=='ATTENTION' %}selected{% endif %}>Amarelo · Requer atenção</option><option value="URGENT" {% if r.room_status=='URGENT' %}selected{% endif %}>Vermelho · Atenção urgente</option></select><button class="btn btn-primary btn-sm" type="submit">Salvar</button></form></td></tr>{% endfor %}</tbody></table></div></section>
+{% endif %}
+{% endblock %}

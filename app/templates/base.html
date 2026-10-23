@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title if title else "Controle de Manutenção" }}</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="{{ request.url_for('static', path='styles.css') }}" rel="stylesheet">
+  <link rel="manifest" href="/manifest.webmanifest">
+</head>
+<body>
+{% if request.state.user %}
+<div id="alarm-banner" class="alarm-banner d-none" role="alert" aria-live="assertive">
+  <div class="alarm-banner__inner">
+    <span class="alarm-banner__icon">🔔</span>
+    <span class="alarm-banner__msg">Novo chamado!</span>
+    <a class="alarm-banner__open" href="/tickets">Abrir chamados</a>
+    <span class="alarm-banner__note">O som para quando alguém atender.</span>
+  </div>
+</div>
+<div class="mobile-topbar" id="mobile-topbar" hidden>
+  <button class="mobile-menu-btn" type="button" id="mobile-menu-btn" aria-label="Abrir menu">☰</button>
+  <a class="mobile-brand" href="/dashboard">
+    <div class="brand-badge small">TI</div>
+    <div>
+      <strong>Manutenção</strong>
+      <span>Painel local</span>
+    </div>
+  </a>
+</div>
+<div class="sidebar-overlay" id="sidebar-overlay"></div>
+<div class="app-shell">
+  <aside class="sidebar" id="app-sidebar">
+    <a class="brand" href="/dashboard">
+      <div class="brand-badge">TI</div>
+      <div>
+        <strong>Manutenção</strong>
+        <span>Painel local</span>
+      </div>
+    </a>
+
+    <nav class="menu">
+      <a class="menu-item {% if request.url.path == '/dashboard' %}active{% endif %}" href="/dashboard">Dashboard</a>
+      <a class="menu-item {% if request.url.path == '/machines' or request.url.path.startswith('/machines/') %}active{% endif %}" href="/machines">Máquinas</a>
+      <a class="menu-item {% if request.url.path.startswith('/rooms') %}active{% endif %}" href="/rooms">Salas</a>
+      <a class="menu-item {% if request.url.path.startswith('/tickets') %}active{% endif %}" id="tickets-link" href="/tickets">
+        Chamados
+        <span class="badge danger d-none ms-auto" id="tickets-badge">0</span>
+      </a>
+      <a class="menu-item" href="/reports/relatorio.xlsm">Relatório</a>
+      {% if request.state.user.is_admin %}
+      <a class="menu-item {% if request.url.path.startswith('/users') %}active{% endif %}" href="/users">Usuários</a>
+      {% endif %}
+      <a class="menu-item {% if request.url.path == '/machines/new' %}active{% endif %}" href="/machines/new">Nova máquina</a>
+    </nav>
+
+    <div class="sidebar-top-actions">
+      <button class="btn btn-sm btn-outline-light" type="button" id="alarm-toggle-btn" title="Ativar ou testar o som dos chamados">🔊</button>
+      <button class="btn btn-sm btn-outline-light" type="button" id="push-enable-btn" title="Ativar notificações">🔔</button>
+      <a class="btn btn-sm btn-warning" href="/logout">Sair</a>
+    </div>
+
+    <div class="sidebar-foot">
+      <div class="profile-chip">
+        <div class="avatar">{{ (request.state.user.username[:2] if request.state.user and request.state.user.username else 'TI')|upper }}</div>
+        <div>
+          <strong>{{ request.state.user.username }}</strong>
+          <span>{% if request.state.user.is_admin %}Administrador local{% else %}Usuário local{% endif %}</span>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main app-main">
+    <div id="toast-container"></div>
+    <div class="content-area">
+{% else %}
+<div id="toast-container"></div>
+{% endif %}
+
+{% block content %}{% endblock %}
+
+{% if request.state.user %}
+      <footer class="page-footer">
+        <a class="btn btn-outline-secondary btn-sm" id="footer-report-btn" href="/reports/relatorio.xlsm">Baixar relatório (XLSX)</a>
+      </footer>
+    </div>
+  </main>
+</div>
+{% endif %}
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="{{ request.url_for('static', path='app.js') }}"></script>
+{% if request.state.user %}
+<script src="{{ request.url_for('static', path='notify_live.js') }}"></script>
+<script src="{{ request.url_for('static', path='push_client.js') }}"></script>
+{% endif %}
+{% block scripts %}{% endblock %}
+</body>
+</html>

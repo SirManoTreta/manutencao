@@ -1,0 +1,325 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header"><div><h1>{% if mode == "create" %}Cadastrar máquina{% else %}Editar máquina{% endif %}</h1><p>Formulário visualmente aproximado do protótipo, mantendo os mesmos campos do sistema local.</p></div><div class="page-actions"><a class="btn btn-outline-secondary" href="/machines">Voltar</a></div></div>
+
+<form method="post" action="{% if mode == 'create' %}/machines/new{% else %}/machines/{{ machine.id }}/edit{% endif %}">
+  <div class="panel">
+  <div class="row g-3">
+    <div class="col-12 col-md-6">
+      <label class="form-label">Nome da máquina</label>
+      <input class="form-control" name="machine_name" required value="{{ machine.machine_name if machine else '' }}">
+    </div>
+
+    <div class="col-12 col-md-6">
+      <label class="form-label">Turma/Sala</label>
+      <input class="form-control" name="room_name" required value="{{ machine.room_name if machine else '' }}">
+    </div>
+
+    <div class="col-12 col-md-6">
+      <label class="form-label">Status da sala</label>
+      {% set rs = (machine.room_status if machine and machine.room_status else 'OK') %}
+      <select class="form-select" name="room_status">
+        <option value="OK" {% if rs=='OK' %}selected{% endif %}>Verde · Tudo OK</option>
+        <option value="ATTENTION" {% if rs=='ATTENTION' %}selected{% endif %}>Amarelo · Requer atenção</option>
+        <option value="URGENT" {% if rs=='URGENT' %}selected{% endif %}>Vermelho · Atenção urgente</option>
+      </select>
+    </div>
+
+
+    <div class="col-12 col-md-6">
+      <label class="form-label">IP</label>
+      <input class="form-control" name="ip" required value="{{ machine.ip if machine else '' }}">
+    </div>
+
+    <div class="col-12 col-md-6">
+      <label class="form-label">Usuário</label>
+      <input class="form-control" name="username" required value="{{ machine.username if machine else '' }}">
+    </div>
+
+    <div class="col-12">
+      <div class="h6 mb-0">Acesso remoto / Rede (opcional)</div>
+      <div class="form-text">Guarde aqui o ID e a senha de acesso desassistido do HopToDesk e o MAC do equipamento.</div>
+    </div>
+
+    <div class="col-12 col-md-4">
+      <label class="form-label">HopToDesk ID</label>
+      <input class="form-control" name="hoptodesk_id" value="{{ machine.hoptodesk_id if machine and machine.hoptodesk_id else '' }}">
+    </div>
+
+    <div class="col-12 col-md-4">
+      <label class="form-label">Senha HopToDesk</label>
+      <div class="input-group">
+        <input class="form-control" type="password" name="hoptodesk_password" id="hoptodesk_password"
+               autocomplete="new-password"
+               value="{{ machine.hoptodesk_password if machine and machine.hoptodesk_password else '' }}">
+        <button class="btn btn-outline-secondary" type="button" id="toggleHopPass">Mostrar</button>
+      </div>
+    </div>
+
+    <div class="col-12 col-md-4">
+      <label class="form-label">Endereço físico (MAC)</label>
+      <input class="form-control" name="mac_address" placeholder="AA:BB:CC:DD:EE:FF"
+             value="{{ machine.mac_address if machine and machine.mac_address else '' }}">
+    </div>
+
+    <div class="col-12">
+      <label class="form-label">Perfil de periféricos</label>
+      <select class="form-select" name="profile" id="profileSelect" required>
+        {% for code, label in profiles %}
+          <option value="{{ code }}" {% if profile == code %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      <div class="form-text">
+        Ao trocar o perfil, a página recarrega para atualizar a lista de periféricos.
+      </div>
+    </div>
+
+    <div class="col-12">
+      <div class="panel">
+        <div class="panel-head"><h3>Periféricos</h3></div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-sm mb-0 align-middle">
+              <thead class="table-light">
+                <tr>
+                  <th>Item</th>
+                  <th class="text-center">Presente</th>
+                  <th class="text-center">Testado e funcionando</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for p in peripherals %}
+                  {% set v = peripheral_values.get(p.code, {"present": False, "tested_working": False, "quantity": 0}) %}
+                  <tr>
+                    <td>{{ p.label }}</td>
+                    <td class="text-center">
+                      <input class="form-check-input present-box" type="checkbox"
+                             name="present_{{ p.code }}" id="present_{{ p.code }}"
+                             {% if v["present"] %}checked{% endif %}>
+
+                      {% if p.has_quantity %}
+                        <input class="form-control form-control-sm d-inline-block ms-2 qty-input"
+                               style="width: 90px;"
+                               type="number"
+                               min="0" step="1"
+                               name="qty_{{ p.code }}" id="qty_{{ p.code }}"
+                               data-present-id="present_{{ p.code }}"
+                               value="{% if v['quantity'] and v['quantity'] > 0 %}{{ v['quantity'] }}{% else %}2{% endif %}">
+                      {% endif %}
+                    </td>
+                    <td class="text-center">
+                      <input class="form-check-input tested-box" type="checkbox"
+                             name="tested_{{ p.code }}" id="tested_{{ p.code }}"
+                             data-present-id="present_{{ p.code }}"
+                             {% if v["tested_working"] %}checked{% endif %}>
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+
+          {% if profile == 'A' %}
+            <div class="border-top p-3">
+              <label class="form-label mb-1">Horas da lâmpada do projetor</label>
+              <input class="form-control" type="number" min="0" step="1" name="projector_lamp_hours"
+                     value="{{ machine.projector_lamp_hours if machine and machine.projector_lamp_hours is not none else '' }}">
+              <div class="form-text">Apenas para o Perfil A.</div>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+      <div class="form-text">
+        Para CABO RCA (Perfis A/B): quantidade padrão 2.
+      </div>
+    </div>
+
+    <div class="col-12 col-md-4">
+      <div class="form-check mt-4">
+        <input class="form-check-input" type="checkbox" name="inspected" id="inspected"
+               {% if machine and machine.inspected %}checked{% endif %}>
+        <label class="form-check-label" for="inspected">Vistoriado e testado</label>
+      </div>
+    </div>
+
+    <div class="col-12 col-md-4">
+      <label class="form-label">Data da última vistoria</label>
+      <input class="form-control" type="date" name="last_inspection_date" id="last_inspection_date"
+             value="{{ machine.last_inspection_date.isoformat() if machine and machine.last_inspection_date else '' }}">
+    </div>
+
+    <div class="col-12 col-md-4"></div>
+
+    <div class="col-12 col-md-4">
+      <div class="form-check mt-4">
+        <input class="form-check-input" type="checkbox" name="checkup_done" id="checkup_done"
+               {% if machine and machine.checkup_done %}checked{% endif %}>
+        <label class="form-check-label" for="checkup_done">Checkup realizado</label>
+      </div>
+    </div>
+
+    <div class="col-12 col-md-4">
+      <label class="form-label">Data do último checkup</label>
+      <input class="form-control" type="date" name="last_checkup_date" id="last_checkup_date"
+             value="{{ machine.last_checkup_date.isoformat() if machine and machine.last_checkup_date else '' }}">
+    </div>
+
+    <div class="col-12 col-md-4"></div>
+
+    <div class="col-12">
+  <div class="d-flex align-items-center justify-content-between">
+    <div class="h6 mb-0">Hardware / Software (opcional)</div>
+    <button class="btn btn-sm btn-outline-secondary"
+            type="button"
+            data-bs-toggle="collapse"
+            data-bs-target="#extraInfo"
+            aria-expanded="false"
+            aria-controls="extraInfo">
+      ▸
+    </button>
+  </div>
+
+  <div class="collapse mt-2" id="extraInfo">
+    <div class="card">
+      <div class="card-body">
+        <div class="row g-3">
+          <div class="col-12 col-md-6">
+            <label class="form-label">SO</label>
+            <input class="form-control" name="os_name" value="{{ machine.os_name if machine and machine.os_name else '' }}">
+          </div>
+
+          <div class="col-12 col-md-6">
+            <label class="form-label">Placa de vídeo</label>
+            <select class="form-select" name="gpu_type">
+              {% set gv = (machine.gpu_type if machine and machine.gpu_type else '') %}
+              <option value="" {% if gv=='' %}selected{% endif %}></option>
+              <option value="integrada" {% if gv=='integrada' %}selected{% endif %}>Integrada</option>
+              <option value="offboard" {% if gv=='offboard' %}selected{% endif %}>Off board</option>
+            </select>
+          </div>
+
+          <div class="col-12 col-md-4">
+            <label class="form-label">Memória RAM (GB)</label>
+            <input class="form-control" type="number" min="0" step="1" name="ram_gb"
+                   value="{{ machine.ram_gb if machine and machine.ram_gb is not none else '' }}">
+          </div>
+
+          <div class="col-12 col-md-4">
+            <label class="form-label">Qtd. módulos RAM</label>
+            <input class="form-control" type="number" min="0" step="1" name="ram_modules"
+                   value="{{ machine.ram_modules if machine and machine.ram_modules is not none else '' }}">
+          </div>
+
+          <div class="col-12 col-md-4">
+            <label class="form-label">Processador</label>
+            <input class="form-control" name="cpu_model" value="{{ machine.cpu_model if machine and machine.cpu_model else '' }}">
+          </div>
+
+          <div class="col-12 col-md-4">
+            <label class="form-label">Armazenamento (tipo)</label>
+            {% set st = (machine.storage_type if machine and machine.storage_type else '') %}
+            <select class="form-select" name="storage_type">
+              <option value="" {% if st=='' %}selected{% endif %}></option>
+              <option value="HDD" {% if st=='HDD' %}selected{% endif %}>HD</option>
+              <option value="SSD" {% if st=='SSD' %}selected{% endif %}>SSD</option>
+              <option value="NVME" {% if st=='NVME' %}selected{% endif %}>NVME</option>
+            </select>
+          </div>
+
+          <div class="col-12 col-md-4">
+            <label class="form-label">Armazenamento (GB)</label>
+            <input class="form-control" type="number" min="0" step="1" name="storage_gb"
+                   value="{{ machine.storage_gb if machine and machine.storage_gb is not none else '' }}">
+          </div>
+
+          <div class="col-12 col-md-4"></div>
+
+          <div class="col-12 col-md-4">
+            <div class="form-check mt-4">
+              <input class="form-check-input" type="checkbox" name="office_installed" id="office_installed"
+                     {% if machine and machine.office_installed %}checked{% endif %}>
+              <label class="form-check-label" for="office_installed">Office instalado</label>
+            </div>
+          </div>
+
+          <div class="col-12 col-md-8">
+            <label class="form-label">Versão Office</label>
+            <input class="form-control" name="office_version" id="office_version"
+                   value="{{ machine.office_version if machine and machine.office_version else '' }}">
+          </div>
+
+          <div class="col-12 col-md-4">
+            <div class="form-check mt-4">
+              <input class="form-check-input" type="checkbox" name="kaspersky_installed" id="kaspersky_installed"
+                     {% if machine and machine.kaspersky_installed %}checked{% endif %}>
+              <label class="form-check-label" for="kaspersky_installed">Kaspersky instalado</label>
+            </div>
+          </div>
+
+          <div class="col-12 col-md-4">
+            <div class="form-check mt-4">
+              <input class="form-check-input" type="checkbox" name="kaspersky_updated" id="kaspersky_updated"
+                     {% if machine and machine.kaspersky_updated %}checked{% endif %}>
+              <label class="form-check-label" for="kaspersky_updated">Kaspersky atualizado</label>
+            </div>
+          </div>
+
+          <div class="col-12 col-md-4"></div>
+
+          <div class="col-12 col-md-4">
+            <label class="form-label">Qtd. portas USB</label>
+            <input class="form-control" type="number" min="0" step="1" name="usb_ports_qty"
+                   value="{{ machine.usb_ports_qty if machine and machine.usb_ports_qty is not none else '' }}">
+          </div>
+
+          <div class="col-12 col-md-4">
+            <div class="form-check mt-4">
+              <input class="form-check-input" type="checkbox" name="usb_ports_working" id="usb_ports_working"
+                     {% if machine and machine.usb_ports_working %}checked{% endif %}>
+              <label class="form-check-label" for="usb_ports_working">Portas USB funcionando</label>
+            </div>
+          </div>
+
+          <div class="col-12">
+            <label class="form-label">Adaptadores (vídeo/som/rede)</label>
+            <textarea class="form-control" rows="3" name="adapters">{{ machine.adapters if machine and machine.adapters else '' }}</textarea>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+    <div class="col-12">
+      <label class="form-label">Descrição da situação (em caso de manutenção)</label>
+      <textarea class="form-control" name="maintenance_description" rows="4">{{ machine.maintenance_description if machine and machine.maintenance_description else '' }}</textarea>
+    </div>
+
+    <div class="col-12 d-flex gap-2">
+      <button class="btn btn-success" type="submit">Salvar</button>
+      <a class="btn btn-outline-secondary" href="{% if machine %}/machines/{{ machine.id }}{% else %}/machines{% endif %}">Cancelar</a>
+    </div>
+  </div>
+</form>
+
+<script>
+  const profileSelect = document.getElementById("profileSelect");
+  profileSelect?.addEventListener("change", () => {
+    const val = profileSelect.value;
+    const url = new URL(window.location.href);
+    url.searchParams.set("profile", val);
+    window.location.href = url.toString();
+  });
+
+  const hopPass = document.getElementById("hoptodesk_password");
+  const hopBtn = document.getElementById("toggleHopPass");
+  hopBtn?.addEventListener("click", () => {
+    if (!hopPass) return;
+    const isPwd = hopPass.getAttribute("type") === "password";
+    hopPass.setAttribute("type", isPwd ? "text" : "password");
+    hopBtn.textContent = isPwd ? "Ocultar" : "Mostrar";
+  });
+</script>
+{% endblock %}
