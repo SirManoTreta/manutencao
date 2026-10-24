@@ -1,6 +1,6 @@
 # Relatório: configuração de push nativo FCM
 
-Etapa de 24/10/2026. **A implementação está pronta e aguarda configuração externa do Firebase.** Entrega real não foi validada: nenhum projeto configurado, conta de serviço válida ou aparelho Android real foi usado nos testes desta etapa.
+Etapa de 24/10/2026. A implementação foi testada inicialmente com Firebase simulado. Na continuação da configuração local, os arquivos fornecidos pelo usuário foram conferidos, a credencial existente autenticou por OAuth e o APK foi recompilado com configuração Firebase real. **Entrega de notificação em aparelho ainda não foi validada.**
 
 ## Backend
 
@@ -58,21 +58,23 @@ Atualizados `push_service.dart`, `app.dart`, `pubspec.yaml`/lock, testes de push
 
 O bootstrap consome arquivos nativos produzidos pelo FlutterFire. Não há import de `firebase_options.dart` inexistente nem valores fictícios. A documentação explica onde o arquivo gerado pode ficar e por que o JSON/Plist nativo continua necessário neste fluxo.
 
-## Firebase: ações manuais pendentes
+## Firebase: configuração local e validação pendente
 
 Package Android mantido: **`br.com.manutencao.manutencao_mobile`**. Bundle iOS mantido: `br.com.manutencao.manutencaoMobile`.
 
-Falta você:
+Na continuação desta instalação:
 
-1. Criar/escolher projeto Firebase e registrar o Android com o package exato.
-2. Fazer `firebase login`, instalar FlutterFire CLI e executar `flutterfire configure`.
-3. Colocar `google-services.json` real em `mobile/android/app/` e recompilar/reinstalar o app.
-4. Gerar service account no projeto correto, guardá-la somente no servidor e configurar `GOOGLE_APPLICATION_CREDENTIALS` e `FCM_ENABLED=true` no processo FastAPI.
-5. Conceder notificações, verificar registro, testar Console e depois chamado real do Professor_auto, com background, encerramento normal, bloqueio e toque abrindo o detalhe.
+1. Arquivos Android/Dart existentes conferidos: package, project ID, sender ID e app ID correspondem.
+2. Service account existente, fornecida pelo usuário, conferida e autenticada por OAuth; nenhum push enviado.
+3. `run.local.bat` ignorado preparado com caminho da credencial, FCM ativado e projeto correspondente. `run.bat` carrega configuração local sem alterar variáveis globais do Windows.
+4. Banco existente copiado para backup local antes do startup; usuários preservados. FastAPI iniciado, login HTTP 200, API protegida HTTP 401 sem Bearer, portas 8000/5050 ativas e configuração FCM habilitada no startup.
+5. APK recompilado e assinatura verificada; recursos nativos conferem com o projeto configurado. Usuário escolheu instalação manual no celular.
+
+Falta instalar o APK atualizado, fazer login e conceder notificações; depois verificar registro, testar Console e chamado real do Professor_auto, com background, encerramento normal, bloqueio e toque abrindo o detalhe. Nenhum Android estava conectado por ADB durante essa continuação.
 
 O passo a passo, comandos e sequência completa de 14 verificações estão em [docs/mobile_push_firebase.md](mobile_push_firebase.md). Para iOS, ainda são necessários APNs, assinatura e validação macOS/Xcode/aparelho Apple.
 
-`credentials_configured=true` significa caminho informado, não prova de chave válida ou de entrega. O APK desta entrega foi compilado sem `google-services.json`/Plist reais; ainda precisa do novo build após configuração. Nenhum segredo administrativo está no app ou no Git.
+`credentials_configured=true` sozinho significa caminho informado. Nesta instalação houve também validação OAuth separada e conferência dos recursos Firebase reais no APK, que não comprovam entrega FCM no aparelho ou permissão efetiva de envio. Nenhum segredo administrativo está no app ou no Git. Resumo local das verificações em `data/fcm-local-validation.json`, ignorado pelo Git.
 
 ## Testes e artefato
 
@@ -85,12 +87,12 @@ O passo a passo, comandos e sequência completa de 14 verificações estão em [
 - `flutter build apk --debug`: aprovado em 34,6 s com SDK Android 36. Mantido aviso conhecido do plugin Firebase/Kotlin para evolução futura; não houve erro de compilação.
 - `apksigner verify`: assinatura v2 verificada; manifesto confirma package existente, API mínima 24, target 36 e versão 1.0.0+1.
 
-APK local atualizado: `dist/mobile/manutencao-ti-debug.apk`, 184.231.671 bytes (~175,7 MiB). Binário ignorado pelo Git.
+APK local atualizado com configuração Firebase: `dist/mobile/manutencao-ti-debug.apk`, 184.227.593 bytes (~175,7 MiB). Cópia para download LAN em `app/static/manutencao-ti-debug.apk`; ambos ignorados pelo Git.
 
 SHA-256 do APK:
 
 ```text
-283A56E73DF75100823EA59223BD2248BFC5CF12C8F1AD49F8B712C5BC1770CC
+75FE0B662014CE66378635E8CCCF8EE1A87299AA9B08D2597DEE5A89E0C1E738
 ```
 
 Não testados: entrega real pelo Google/APNs, notificações em aparelho físico/bloqueado e build iOS. O envio continua em thread após commit, sem fila persistente de reentrega. Force-stop e restrições do sistema operacional não equivalem a encerramento normal.

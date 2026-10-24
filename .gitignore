@@ -85,3 +85,4 @@ Desktop.ini
 **/*firebase-adminsdk*.json
 **/service-account*.json
 /secrets/
+/run.local.bat

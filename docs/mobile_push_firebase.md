@@ -84,6 +84,8 @@ py -3.12 -m app.main
 
 As variáveis precisam existir no processo que roda o FastAPI. Se iniciar por serviço ou tarefa agendada, configure o ambiente e as permissões de leitura da conta executora. Reinicie o backend após mudar a credencial. O projeto não carrega `.env` automaticamente.
 
+Para manter configuração somente nesta instalação, `run.bat` carrega um arquivo opcional `run.local.bat`, ignorado pelo Git, antes de iniciar Python. Você pode guardar nele os comandos `set "GOOGLE_APPLICATION_CREDENTIALS=CAMINHO_DO_JSON"` e `set "FCM_ENABLED=true"`. O inicializador usa sua própria pasta como diretório e mantém essas variáveis no processo, sem alterar configurações globais do Windows. Não coloque a chave privada no batch: ele contém apenas o caminho do JSON. Nesta instalação esse arquivo local já foi preparado; nos próximos inícios use `run.bat`.
+
 `GOOGLE_APPLICATION_CREDENTIALS` tem prioridade sobre o alias legado `FIREBASE_CREDENTIALS`. Sem caminho e sem ativação explícita, FCM fica desativado. `FCM_ENABLED=false` desativa mesmo com caminho informado. ADC gerenciado é suportado quando FCM é ativado explicitamente, mas não é necessário para esta instalação Windows.
 
 O backend inicializa Firebase Admin somente ao precisar enviar. Não baixa nem gera credenciais. Falhas registram classe do erro e contexto, sem conteúdo da credencial, caminho completo ou token de dispositivo. O servidor precisa de saída HTTPS para os serviços Google.
