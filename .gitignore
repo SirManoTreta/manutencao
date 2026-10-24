@@ -67,6 +67,7 @@ Desktop.ini
 
 # Android / iOS
 **/android/.gradle/
+**/android/.kotlin/
 **/android/local.properties
 **/android/key.properties
 **/ios/Pods/
