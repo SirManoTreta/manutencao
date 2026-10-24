@@ -210,3 +210,22 @@ Pontos:
 - `MANUTENCAO_DATA_DIR` muda diretório de banco/chaves para testes. Padrão permanece `data/`.
   Nunca importar `app.main` em teste antes de isolar essa variável: import migra o banco.
 - Testes Python em `tests/`, dependências em `requirements-dev.txt`. Flutter: analyze/test.
+
+### Push nativo FCM
+
+- Rotas atuais: `POST /api/v1/push/register`, `POST /api/v1/push/unregister`,
+  `GET /api/v1/push/status`. `/devices` permanece compatível com clientes anteriores.
+- `app/services/mobile_devices.py` centraliza upsert único por token e identidade da sessão.
+  Unregister novo desativa token do usuário; nunca aceitar `user_id` do payload.
+- `fcm_devices` inclui `device_name`, `is_active` e `created_at`; migration aditiva em main
+  preserva dispositivos anteriores. Envio filtra dispositivos/usuários/sessões válidos.
+- `GOOGLE_APPLICATION_CREDENTIALS` tem prioridade sobre `FIREBASE_CREDENTIALS` legado.
+  `FCM_ENABLED=false` desativa. Nunca criar/baixar service accounts automaticamente.
+- Dados FCM: `type=new_ticket`, `ticket_id` string. Eventos WebSocket/Web Push existentes
+  continuam `ticket_created`. Limites de tamanho devem considerar JSON escapado.
+- Tokens rejeitados são desativados; resposta antiga não desativa registro renovado.
+  INVALID_ARGUMENT genérico/payload/transiente não comprova token inválido.
+- App usa configs nativas FlutterFire e parser tipado. Foreground produz um aviso FCM;
+  WebSocket só recarrega dados. Token de teste só por ação explícita em build debug.
+- Guia manual e limites: `docs/mobile_push_firebase.md`. Configuração declarada e testes
+  com mocks não comprovam entrega real em aparelho.

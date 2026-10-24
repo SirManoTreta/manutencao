@@ -63,6 +63,10 @@ Consulte [arquitetura, execução e configuração Firebase](docs/mobile.md),
 [instruções Flutter](mobile/README.md) e [resultados da implementação](docs/mobile-implementation-report.md).
 Firebase precisa de configuração externa antes de validar push em aparelho real.
 
+Para ativar push nativo, siga [configuração Firebase e teste no celular](docs/mobile_push_firebase.md).
+O guia inclui package Android, FlutterFire, `GOOGLE_APPLICATION_CREDENTIALS`, registro
+autenticado do aparelho e abertura do chamado ao tocar na notificação.
+
 
 ## Notificações (Web Push)
 

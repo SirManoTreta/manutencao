@@ -46,10 +46,10 @@ O projeto desativa compilação incremental Kotlin para suportar Windows com Pub
 1. Crie projeto no [Firebase Console](https://console.firebase.google.com/).
 2. Registre aplicativo Android com package **`br.com.manutencao.manutencao_mobile`**.
 3. Baixe `google-services.json` e salve em `mobile/android/app/google-services.json`. O plugin Gradle Google Services já é aplicado condicionalmente quando esse arquivo existe. Sem arquivo, o aplicativo continua funcionando com push indisponível.
-4. Configure credencial de serviço do **mesmo projeto** no backend conforme [documentação principal](../docs/mobile.md). Credencial privada fica somente no servidor, nunca no celular/Git.
+4. Configure credencial de serviço do **mesmo projeto** no backend conforme [guia FCM](../docs/mobile_push_firebase.md). Credencial privada fica somente no servidor, nunca no celular/Git.
 5. Compile/reinstale e entre no aplicativo. Aceite permissão de notificações no sistema. Perfil mostra estado do registro; botão Ativar / verificar notificações permite tentar novamente.
 6. Use dispositivo/emulador com Google Play Services e conexão à internet. Backend também precisa alcançar os serviços Google para enviar push.
-7. Crie chamado pelo Professor_auto e valide foreground, background, tela bloqueada e abertura pelo toque. Payload contém `ticket_id`; canal Android é `maintenance_tickets`. O token é enviado autenticado em `POST /api/v1/devices` e removido no logout.
+7. Crie chamado pelo Professor_auto e valide foreground, background, tela bloqueada e abertura pelo toque. Payload contém `ticket_id`; canal Android é `maintenance_tickets`. O token é enviado autenticado em `POST /api/v1/push/register` e desativado por `POST /api/v1/push/unregister` no logout.
 
 O aplicativo inicializa Firebase a partir da configuração nativa. Não depende de `firebase_options.dart` nem de projeto Firebase fictício. Arquivos de configuração local estão ignorados no Git. IDs públicos de cliente não substituem a credencial privada do servidor.
 
@@ -76,10 +76,60 @@ Estados de rede usam loading, vazio, erro com nova tentativa e pull-to-refresh. 
 
 ## Testes e limites
 
-Validação desta entrega: `flutter analyze` sem problemas, **39 testes aprovados** e `flutter build apk --debug` concluído. Uma cópia local está em `dist/mobile/manutencao-ti-debug.apk` na raiz do repositório, fora do versionamento. Resultados completos em [relatório](../docs/mobile-implementation-report.md).
+Esta atualização passou em `flutter analyze`, **66 testes Flutter** e `flutter build apk --debug`. O APK atualizado está em `dist/mobile/manutencao-ti-debug.apk`, fora do versionamento. Resultados completos e hash estão no [relatório FCM](../docs/mobile-push-implementation-report.md); configuração e roteiro físico estão no [guia FCM](../docs/mobile_push_firebase.md).
 
-`test/core_test.dart` cobre autenticação, estado, armazenamento, modelos, timeout de envio/leitura, TLS, erros e HTTP 401 atrasado. `test/widget_test.dart` cobre entrada, navegação, atendimento, limpeza de rotas após expiração, destino de notificação e layout de 320 px com texto ampliado. `test/push_test.dart` verifica registro Bearer, permissão negada, logout idempotente e cancelamento de registro atrasado na troca de servidor.
+`test/core_test.dart` cobre autenticação, estado, armazenamento, modelos, timeout de envio/leitura, TLS, erros e HTTP 401 atrasado. `test/widget_test.dart` cobre entrada, navegação, atendimento, limpeza de rotas após expiração, destino de notificação e layout de 320 px com texto ampliado. `test/push_test.dart` verifica contrato Bearer e metadados, tipos/IDs inválidos, refresh real por stream, inicialização sem Firebase, foreground sem duplicação, initialMessage/toque/local, permissão negada, diagnóstico seguro, logout idempotente, token de teste guardado e cancelamento de callback atrasado.
 
 Testes usam HTTP e dispositivo FCM simulados. Push real depende de projeto/credenciais Firebase/APNs, permissões, internet, Google Play Services, políticas de energia e entrega do sistema operacional. Android force-stop e restrições do iOS podem exigir reabrir app; não se promete entrega após fechamento forçado. Valide a matriz em hardware antes do uso em produção.
 
 Arquitetura completa, rotas e operação do servidor: [docs/mobile.md](../docs/mobile.md). Referências primárias: [Flutter](https://docs.flutter.dev/), [Firebase Flutter setup](https://firebase.google.com/docs/flutter/setup), [recebimento FCM](https://firebase.google.com/docs/cloud-messaging/flutter/receive-messages).
+
+
+## Atualização FCM: configuração e contrato
+
+A implementação está pronta e aguarda configuração externa do Firebase. Nenhum projeto, credencial administrativa ou aparelho real foi usado para validar entrega de push nesta etapa. O roteiro completo de configuração e teste está em [docs/mobile_push_firebase.md](../docs/mobile_push_firebase.md).
+
+Depois de criar o projeto e registrar o package existente no Console, instale Firebase CLI/FlutterFire CLI e execute dentro de `mobile/`:
+
+```powershell
+firebase login
+dart pub global activate flutterfire_cli
+flutterfire configure --platforms=android --android-package-name=br.com.manutencao.manutencao_mobile
+```
+
+Selecione o projeto real e o aplicativo com o package indicado. Não altere o applicationId para executar esse comando. Confirme `android/app/google-services.json` e correspondência ao app cadastrado. No iOS, mantenha bundle `br.com.manutencao.manutencaoMobile` e adicione `GoogleService-Info.plist` ao target Runner no Xcode.
+
+`firebase_bootstrap.dart` inicializa Firebase com os arquivos nativos gerados pelo FlutterFire, tanto no aplicativo quanto no isolate de background. O `firebase_options.dart` público gerado pela CLI pode ficar no projeto, mas não é importado nesse fluxo Android/iOS; sua ausência não quebra o build. Não há configuração fictícia ou dependência de arquivo gerado inexistente. Se forem adicionadas plataformas Web ou múltiplos projetos Firebase, adapte o bootstrap para usar explicitamente `DefaultFirebaseOptions.currentPlatform` após gerar o arquivo real.
+
+O registro acontece após autenticação e permissão concedida:
+
+```text
+POST /api/v1/push/register
+{fcm_token, platform, device_name}
+
+POST /api/v1/push/unregister
+{fcm_token}
+
+GET /api/v1/push/status
+{enabled, credentials_configured, active_devices}
+```
+
+As três rotas usam Bearer; `user_id` nunca vem do celular. `device_info_plus` informa fabricante/modelo Android ou modelo e código de hardware Apple, com fallback para plataforma. Nenhum identificador permanente de hardware ou nome pessoal do usuário é coletado. No iOS 16+, o nome pessoal exigiria entitlement extra; ele não é solicitado.
+
+Perfil mostra confirmação de registro e horário, nome do dispositivo e estado do backend. `credentials_configured` indica configuração informada, sem comprovar validade da conta ou entrega. Falha do diagnóstico não desfaz registro nem impede login. Registro só é apresentado como confirmado depois de resposta `{registered:true}`.
+
+Para a mensagem de teste do Firebase Console, builds **debug** mostram a ação explícita **Copiar token de teste** após login e permissão. O token é colocado somente no clipboard local para ser colado no Console, sem print/log/API de consulta pública. Mantenha privado. Builds release não exibem essa ação; leitura assíncrona é descartada se a sessão mudar.
+
+Payload reconhecido:
+
+```json
+{"type":"new_ticket","ticket_id":"42"}
+```
+
+O parser também aceita o tipo anterior `ticket_created` durante atualização dos servidores. Exige ID decimal positivo em string, dentro do intervalo inteiro; eventos desconhecidos, `ticket_taken`, `ticket_closed` e IDs inválidos não abrem telas nem geram alertas locais. Notificação local guarda o mesmo envelope JSON validado.
+
+WebSocket atualiza listas/dashboard sem produzir alerta nativo. FCM é o único produtor do alerta em foreground, apresentado por `flutter_local_notifications`. Um conjunto limitado aos últimos 256 chamados da sessão evita avisos repetidos do mesmo ID; o conjunto reinicia ao trocar sessão/servidor. Background/encerrado usa a apresentação do sistema operacional, sem notificação local adicional no handler. O toque usa `getInitialMessage`, `onMessageOpenedApp` ou callback local, conforme origem. Destino pendente aguarda login e não atravessa logout ou troca de servidor.
+
+Os testes automatizados usam adaptadores de dispositivo, eventos Firebase e apresentação local simulados. Não enviam push real. Depois de configurar, valide mensagem de teste com `type` e `ticket_id`, depois chamado real do Professor_auto em foreground, background, tela bloqueada e aplicativo encerrado normalmente. Force-stop e políticas do sistema podem exigir reabrir o app.
+
+Referências primárias: [FlutterFire CLI](https://firebase.flutter.dev/docs/cli), [receber mensagens Flutter](https://firebase.google.com/docs/cloud-messaging/flutter/receive-messages), [device_info_plus](https://pub.dev/packages/device_info_plus).

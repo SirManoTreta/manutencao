@@ -1,5 +1,7 @@
 # Relatório de implementação mobile
 
+Registro histórico da primeira entrega. A atualização FCM de 24/10/2026 e o APK atual estão documentados no [relatório FCM](mobile-push-implementation-report.md); o arquivo local de APK pode ter sido substituído pelo build mais recente.
+
 Etapa inicial desenvolvida em 23/10/2026, no repositório existente. A entrega acrescenta um cliente Flutter real e uma API; não troca a aplicação usada pela escola. Arquitetura e configuração completa estão em [mobile.md](mobile.md).
 
 ## Arquitetura entregue

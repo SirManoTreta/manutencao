@@ -34,6 +34,8 @@ Professor_auto.exe / TI Heartbeat.exe
 
 O Flutter nunca conversa com os PCs nem abre o SQLite. REST carrega dados e executa ações; o WebSocket informa eventos para recarregar os dados. FCM entrega notificações quando o aplicativo não está aberto. Receber uma notificação não exige conexão do celular com a LAN, mas abrir o detalhe e operar o sistema exige acesso ao backend, pela rede local ou VPN.
 
+O roteiro atual de push nativo está em [configuração Firebase](mobile_push_firebase.md), incluindo novos endpoints, diagnóstico do registro e teste no aparelho.
+
 ## Backend e contratos
 
 Rotas existentes continuam com seu formato anterior. Novas listas REST retornam arrays JSON. Falhas usam `detail`, com HTTP 401 para sessão inválida, 403 para autorização, 404 para recurso ausente, 409 para conflito e 422 para entrada inválida. O contrato tipado também consta em `app/schemas/` e no OpenAPI gerado por FastAPI.
@@ -58,7 +60,12 @@ Rotas existentes continuam com seu formato anterior. Novas listas REST retornam 
 | PUT, DELETE | `/api/v1/users/{id}` | Alterar/desativar usuário; somente administrador |
 | POST | `/api/v1/devices` | Registrar `{token, platform: "android" ou "ios"}` |
 | DELETE | `/api/v1/devices` | Corpo `{token}` remove registro da sessão atual |
+| POST | `/api/v1/push/register` | Registrar `{fcm_token, platform, device_name?}`; contrato atual do Flutter |
+| POST | `/api/v1/push/unregister` | Corpo `{fcm_token}` desativa token do usuário atual |
+| GET | `/api/v1/push/status` | Configuração declarada e quantidade de dispositivos ativos do usuário |
 | WS | `/ws/v1/tickets` | Header `Authorization: Bearer ...` |
+
+As rotas `/devices` são mantidas para compatibilidade com a primeira versão mobile.
 
 Máquinas aceitam filtros `q`, `profile`, `segment`, `room_status`, `inspected` e `checkup_done`. `PUT` preserva campos omitidos, incluindo periféricos e a senha remota preexistente. Periféricos seguem o catálogo dos perfis A/B/C de `app/constants.py`. Campos de autoria e datas são preenchidos pelo backend. Vistorias e checkups usam o mesmo vencimento de 7/2/1 dias conforme o status, no fuso de Brasília.
 
@@ -85,7 +92,7 @@ O Flutter guarda o Bearer em `flutter_secure_storage`. O URL do servidor é conf
 Novas tabelas:
 
 - `mobile_sessions`: usuário, digest do Bearer, impressão do hash de senha, criação e expiração.
-- `fcm_devices`: token de entrega FCM, digest único, plataforma, usuário, sessão e atualização.
+- `fcm_devices`: token de entrega FCM, digest único, plataforma, nome do aparelho, situação ativa, usuário, sessão, criação e atualização.
 
 Nova coluna: `tickets.resolution_note`, nota opcional de finalização. O diagnóstico técnico original `diagnostics_json`, enviado pelo professor, permanece separado.
 
@@ -140,7 +147,7 @@ FCM permanece desativado no backend sem credenciais ou ativação explícita. O 
 
 ```powershell
 $env:FCM_ENABLED = 'true'
-$env:FIREBASE_CREDENTIALS = 'C:\secrets\firebase-service-account.json'
+$env:GOOGLE_APPLICATION_CREDENTIALS = 'C:\secrets\firebase-service-account.json'
 $env:FIREBASE_PROJECT_ID = 'seu-projeto-firebase'
 py -3.12 -m app.main
 ```
@@ -164,7 +171,7 @@ flutter run
 
 Confirme que `mobile/android/app/google-services.json` foi gerado e corresponde ao pacote. O Gradle aplica o plugin Google Services quando esse arquivo existe; sem ele, o build continua permitindo testar as funções REST. O cliente inicializa Firebase pelas configurações nativas; `firebase_options.dart` gerado pelo FlutterFire não substitui o arquivo nativo nesse fluxo. No iOS, adicione `GoogleService-Info.plist` ao target Runner no Xcode.
 
-O backend envia mensagem com `notification` + `data.ticket_id`, prioridade Android alta e canal `maintenance_tickets`. O sistema operacional pode exibir a notificação com o app fechado; o clique permite buscar o chamado autenticado. Flutter trata aviso em primeiro plano, abertura em background e abertura inicial. `UnregisteredError` remove tokens expirados; erros transitórios não removem dispositivos válidos.
+O backend envia mensagem com `notification` + `data.type=new_ticket` e `data.ticket_id`, prioridade Android alta e canal `maintenance_tickets`. O sistema operacional pode exibir a notificação com o app fechado; o clique permite buscar o chamado autenticado. Flutter trata aviso em primeiro plano, abertura em background e abertura inicial. `UnregisteredError` desativa tokens rejeitados; erros transitórios mantêm dispositivos válidos. O parser aceita também `ticket_created` legado. O orçamento da mensagem considera escapes JSON para respeitar o limite de tamanho.
 
 FCM depende de configuração, permissões, conectividade e políticas do sistema operacional. Forçar parada do app nas configurações do Android impede recebimento até reabri-lo; no iOS, dispensar o app também afeta mensagens em background. Veja [recebimento oficial no Flutter](https://firebase.google.com/docs/cloud-messaging/flutter/receive-messages). Não confundir essas restrições com simplesmente minimizar o aplicativo.
 
