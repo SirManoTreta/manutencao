@@ -59,3 +59,53 @@ print("legacy migration ok")
     )
     assert result.returncode == 0, result.stderr
     assert "legacy migration ok" in result.stdout
+
+
+def test_existing_fcm_token_survives_additive_device_metadata_migration(tmp_path):
+    """An installed first mobile version already has devices, not an empty DB."""
+    import sqlite3
+
+    project = Path(__file__).resolve().parents[1]
+    directory = tmp_path / "old-mobile-data"
+    directory.mkdir()
+    database_path = directory / "app.db"
+    with sqlite3.connect(database_path) as connection:
+        connection.executescript('''
+            CREATE TABLE users (
+                id INTEGER PRIMARY KEY, username VARCHAR(80) NOT NULL UNIQUE,
+                password_hash VARCHAR(255) NOT NULL, is_admin BOOLEAN NOT NULL,
+                is_active BOOLEAN NOT NULL, created_at DATETIME NOT NULL
+            );
+            CREATE TABLE mobile_sessions (
+                id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id),
+                token_hash VARCHAR(64) NOT NULL UNIQUE, password_fingerprint VARCHAR(64) NOT NULL,
+                created_at DATETIME NOT NULL, expires_at DATETIME NOT NULL
+            );
+            CREATE TABLE fcm_devices (
+                id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id),
+                session_id INTEGER NOT NULL REFERENCES mobile_sessions(id),
+                token_hash VARCHAR(64) NOT NULL UNIQUE, token TEXT NOT NULL,
+                platform VARCHAR(16) NOT NULL, updated_at DATETIME NOT NULL
+            );
+            INSERT INTO users VALUES (1,'tecnico-legado','fake-hash',0,1,'2026-01-01 00:00:00');
+            INSERT INTO mobile_sessions VALUES (1,1,'session-hash','fingerprint','2026-01-01 00:00:00','2099-01-01 00:00:00');
+            INSERT INTO fcm_devices VALUES (1,1,1,'fcm-hash','existing-phone-token','android','2026-02-01 10:30:00');
+        ''')
+    environment = dict(os.environ, MANUTENCAO_DATA_DIR=str(directory))
+    result = subprocess.run(
+        [sys.executable, "-c", "import app.main; app.main._migrate_sqlite(); app.main._migrate_sqlite()"],
+        cwd=project, env=environment, text=True, encoding="utf-8", capture_output=True, timeout=30,
+    )
+    assert result.returncode == 0, result.stderr
+    with sqlite3.connect(database_path) as connection:
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(fcm_devices)")}
+        assert {"device_name", "created_at", "is_active"} <= columns
+        devices = connection.execute(
+            "SELECT id,user_id,session_id,token_hash,token,platform,updated_at,device_name,created_at,is_active FROM fcm_devices"
+        ).fetchall()
+        assert len(devices) == 1
+        device = devices[0]
+        assert device[:7] == (1, 1, 1, "fcm-hash", "existing-phone-token", "android", "2026-02-01 10:30:00")
+        assert device[7] is None
+        assert device[8] is not None
+        assert device[9] == 1

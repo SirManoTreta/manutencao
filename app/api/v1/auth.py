@@ -8,7 +8,6 @@ from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy import delete
-from sqlalchemy.dialects.sqlite import insert
 from sqlalchemy.orm import Session
 
 from ... import crud
@@ -16,6 +15,7 @@ from ...database import get_db
 from ...models import FCMDevice, MobileSession, User
 from ...schemas.auth import AuthUser, DeviceDelete, DeviceInput, LoginInput, LoginOutput
 from ...security import hash_password, verify_password
+from ...services.mobile_devices import register_device as register_mobile_device
 from .dependencies import current_session, current_user, digest_token, password_fingerprint
 
 router = APIRouter(tags=["Autenticação mobile"])
@@ -78,11 +78,7 @@ def logout(session: MobileSession = Depends(current_session), db: Session = Depe
 
 @router.post("/devices", status_code=201)
 def register_device(body: DeviceInput, session: MobileSession = Depends(current_session), db: Session = Depends(get_db)):
-    values = dict(
-        token_hash=digest_token(body.token), token=body.token, platform=body.platform,
-        user_id=session.user_id, session_id=session.id, updated_at=datetime.utcnow(),
-    )
-    db.execute(insert(FCMDevice).values(**values).on_conflict_do_update(index_elements=["token_hash"], set_=values))
+    register_mobile_device(db, session, fcm_token=body.token, platform=body.platform)
     db.commit()
     return {"registered": True}
 

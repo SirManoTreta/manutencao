@@ -1,6 +1,7 @@
 import os
 import io
 import secrets
+import logging
 import asyncio
 import re
 from contextlib import asynccontextmanager
@@ -29,6 +30,7 @@ from .constants import PROFILE_A, PROFILE_B, PROFILE_C, peripherals_for_profile
 from .chamados_socket import start_chamados_server, stop_chamados_server
 from .realtime import set_main_loop, manager, broadcast_from_thread
 from .push import ensure_vapid_keys, get_public_key, upsert_subscription, delete_subscription
+from .fcm import configuration_status
 
 from .security import hash_password, verify_password
 from .services.maintenance import (
@@ -120,6 +122,16 @@ def _migrate_sqlite():
             conn.execute(text("ALTER TABLE tickets ADD COLUMN assigned_by VARCHAR(80)"))
         if "resolution_note" not in ticket_cols:
             conn.execute(text("ALTER TABLE tickets ADD COLUMN resolution_note TEXT"))
+
+        # Instalações mobile anteriores já têm tokens; acrescentar só metadados.
+        device_cols = [r[1] for r in conn.execute(text("PRAGMA table_info(fcm_devices)")).fetchall()]
+        if "device_name" not in device_cols:
+            conn.execute(text("ALTER TABLE fcm_devices ADD COLUMN device_name VARCHAR(120)"))
+        if "is_active" not in device_cols:
+            conn.execute(text("ALTER TABLE fcm_devices ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT 1"))
+        if "created_at" not in device_cols:
+            conn.execute(text("ALTER TABLE fcm_devices ADD COLUMN created_at DATETIME"))
+            conn.execute(text("UPDATE fcm_devices SET created_at = COALESCE(updated_at, CURRENT_TIMESTAMP)"))
         conn.commit()
 
 _migrate_sqlite()
@@ -195,6 +207,13 @@ async def lifespan(app: FastAPI):
     # ===== Startup =====
     # Captura o loop do FastAPI para permitir broadcast WebSocket vindo da thread TCP.
     set_main_loop(asyncio.get_running_loop())
+
+    # Diagnóstico de configuração sem abrir credencial, autenticar ou enviar push.
+    mobile_push = configuration_status()
+    logging.getLogger("uvicorn.error").info(
+        "FCM: enabled=%s, credencial externa informada=%s (entrega ainda não validada)",
+        mobile_push["enabled"], mobile_push["credentials_configured"],
+    )
 
     # Web Push: garante chaves VAPID (salvas em /data). Mantém a mesma chave entre reinícios.
     keys = ensure_vapid_keys()

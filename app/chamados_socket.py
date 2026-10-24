@@ -13,6 +13,7 @@ Esse servidor roda em thread, iniciado no startup do FastAPI.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import socket
 import socketserver
@@ -24,6 +25,8 @@ from .models import Machine, Ticket, MachineHeartbeat
 from .realtime import broadcast_from_thread
 from .push import enqueue_push, build_ticket_push_payload
 from .fcm import enqueue_ticket_push
+
+logger = logging.getLogger(__name__)
 
 
 DEFAULT_HOST = os.getenv("CHAMADOS_HOST", "0.0.0.0")
@@ -146,11 +149,18 @@ class _TicketTCPHandler(socketserver.BaseRequestHandler):
         # Notifica a UI em tempo real (sem recarregar a página)
         if ticket_created:
             payload = {"type": "ticket_created", "pc_name": pc_name, "problem": created_problem, "ticket_id": created_ticket_id}
-            broadcast_from_thread(payload)
-            # Push do sistema (Service Worker) — só vai disparar se o cliente tiver subscription ativa
-            enqueue_push(build_ticket_push_payload(pc_name=pc_name, problem=created_problem or "Novo chamado", ticket_id=created_ticket_id))
-            # FCM nativo coexiste com WebSocket e Web Push; só após persistir o chamado.
-            enqueue_ticket_push(created_ticket_id)
+            # Cada transporte é independente; nenhum deles desfaz o commit ou
+            # impede os demais quando o serviço externo está indisponível.
+            notifications = (
+                ("WebSocket", lambda: broadcast_from_thread(payload)),
+                ("Web Push", lambda: enqueue_push(build_ticket_push_payload(pc_name=pc_name, problem=created_problem or "Novo chamado", ticket_id=created_ticket_id))),
+                ("FCM", lambda: enqueue_ticket_push(created_ticket_id)),
+            )
+            for transport, notify in notifications:
+                try:
+                    notify()
+                except Exception as exc:
+                    logger.warning("Chamado %s salvo; %s indisponível (%s).", created_ticket_id, transport, type(exc).__name__)
 
 
 class _ThreadingTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
