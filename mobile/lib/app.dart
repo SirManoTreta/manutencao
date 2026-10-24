@@ -1,7 +1,10 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'core/session.dart';
+import 'core/api_client.dart';
 import 'core/push_service.dart';
 import 'core/realtime.dart';
 import 'features/dashboard.dart';
@@ -62,6 +65,10 @@ class _MaintenanceAppState extends State<MaintenanceApp>
     if (id == null || !widget.session.authenticated || _pendingScheduled) {
       return;
     }
+    if (!widget.push.pendingOriginMatchesServer) {
+      widget.push.discardPendingTicket();
+      return;
+    }
     _pendingScheduled = true;
     final generation = widget.session.generation;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -70,11 +77,12 @@ class _MaintenanceAppState extends State<MaintenanceApp>
           !widget.session.authenticated ||
           widget.session.generation != generation ||
           widget.push.pendingTicket.value != id ||
+          !widget.push.pendingOriginMatchesServer ||
           _navigator.currentState == null) {
         if (mounted && widget.session.authenticated) _openPendingTicket();
         return;
       }
-      widget.push.pendingTicket.value = null;
+      widget.push.discardPendingTicket();
       _navigator.currentState!.push(
         MaterialPageRoute<void>(
           builder: (_) => TicketDetailPage(
@@ -348,6 +356,34 @@ class ProfilePage extends StatefulWidget {
 
 class _ProfilePageState extends State<ProfilePage> {
   bool _busy = false;
+  bool _copying = false;
+  Future<void> _copyDebugToken() async {
+    setState(() => _copying = true);
+    try {
+      final token = await widget.push.getDebugToken();
+      if (!mounted) return;
+      if (token == null || token.isEmpty) {
+        throw const ApiException(
+          'Token indisponível ou sessão alterada. Tente novamente.',
+        );
+      }
+      await Clipboard.setData(ClipboardData(text: token));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Token de teste copiado. Cole somente no Firebase Console e mantenha privado.',
+            ),
+          ),
+        );
+      }
+    } catch (error) {
+      if (mounted) showError(context, error);
+    } finally {
+      if (mounted) setState(() => _copying = false);
+    }
+  }
+
   Future<void> _logout() async {
     setState(() => _busy = true);
     await widget.push.unregister();
@@ -392,12 +428,57 @@ class _ProfilePageState extends State<ProfilePage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(widget.push.status),
+              if (widget.push.deviceName != null)
+                InfoRow('Dispositivo', widget.push.deviceName),
+              if (widget.push.registeredAt != null)
+                InfoRow('Registrado em', displayDate(widget.push.registeredAt)),
+              if (widget.push.backendStatus != null) ...[
+                InfoRow(
+                  'Envio no servidor',
+                  widget.push.backendStatus!.enabled
+                      ? 'Habilitado'
+                      : 'Desativado',
+                ),
+                InfoRow(
+                  'Credencial informada',
+                  widget.push.backendStatus!.credentialsConfigured,
+                ),
+                InfoRow(
+                  'Dispositivos ativos nesta conta',
+                  widget.push.backendStatus!.activeDevices,
+                ),
+                const Text(
+                  'Credencial informada não comprova validade ou entrega de push.',
+                  style: TextStyle(fontSize: 12),
+                ),
+              ],
+              if (widget.push.backendStatusNotice != null)
+                Text(widget.push.backendStatusNotice!),
               const SizedBox(height: 16),
               FilledButton.tonalIcon(
                 onPressed: widget.push.available ? widget.push.enable : null,
                 icon: const Icon(Icons.notifications_active_outlined),
                 label: const Text('Ativar / verificar notificações'),
               ),
+              if (kDebugMode) ...[
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed:
+                      widget.push.available &&
+                          widget.push.permissionGranted &&
+                          !_copying &&
+                          !_busy
+                      ? _copyDebugToken
+                      : null,
+                  icon: const Icon(Icons.copy_outlined),
+                  label: Text(_copying ? 'Copiando…' : 'Copiar token de teste'),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Somente debug: use no Firebase Console. Não publique o token.',
+                  style: TextStyle(fontSize: 12),
+                ),
+              ],
             ],
           ),
         ),

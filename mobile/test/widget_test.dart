@@ -193,7 +193,10 @@ void main() {
   ) async {
     final fixture = Fixture(authenticated: false);
     addTearDown(fixture.dispose);
-    fixture.push.openTicket('42');
+    fixture.push.handleNotificationOpened({
+      'type': 'new_ticket',
+      'ticket_id': '42',
+    });
     await tester.pumpWidget(fixture.app());
     await tester.pumpAndSettle();
     await fixture.session.login('http://school.example', 'tecnico', 'secret');
@@ -232,7 +235,10 @@ void main() {
     addTearDown(fixture.dispose);
     await tester.pumpWidget(fixture.app());
     await tester.pumpAndSettle();
-    fixture.push.openTicket('42');
+    fixture.push.handleNotificationOpened({
+      'type': 'new_ticket',
+      'ticket_id': '42',
+    });
     fixture.session.expire();
     await fixture.session.login('http://school.example', 'tecnico', 'secret');
     await tester.pumpAndSettle();
@@ -240,6 +246,26 @@ void main() {
     expect(find.text('Visão geral'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
+
+  testWidgets(
+    'notification from previous server cannot open same ID after server change',
+    (tester) async {
+      final fixture = Fixture(authenticated: false);
+      addTearDown(fixture.dispose);
+      fixture.push.handleNotificationOpened({
+        'type': 'new_ticket',
+        'ticket_id': '42',
+      });
+      await tester.pumpWidget(fixture.app());
+      await tester.pumpAndSettle();
+      await fixture.session.login('https://other.example', 'tecnico', 'secret');
+      await tester.pumpAndSettle();
+      expect(find.text('Chamado #42'), findsNothing);
+      expect(find.text('Visão geral'), findsOneWidget);
+      expect(fixture.push.pendingTicket.value, isNull);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
 
   testWidgets('dashboard fits narrow device with larger accessibility text', (
     tester,
