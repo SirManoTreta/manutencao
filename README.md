@@ -53,7 +53,15 @@ py -3.12 -m PyInstaller "TI Watchdog.spec"
 py -3.12 -m PyInstaller "TI Heartbeat.spec"
 ```
 
-A versão mobile em Flutter/Dart será desenvolvida posteriormente neste mesmo projeto.
+## Aplicativo mobile Flutter
+
+O cliente Android/iOS está em [`mobile/`](mobile/), integrado ao mesmo backend e SQLite.
+Inclui API autenticada em `/api/v1`, atendimento de chamados, inventário, salas,
+heartbeat, realtime e integração Firebase Cloud Messaging, preservando o site existente.
+
+Consulte [arquitetura, execução e configuração Firebase](docs/mobile.md),
+[instruções Flutter](mobile/README.md) e [resultados da implementação](docs/mobile-implementation-report.md).
+Firebase precisa de configuração externa antes de validar push em aparelho real.
 
 
 ## Notificações (Web Push)

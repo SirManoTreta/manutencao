@@ -188,3 +188,25 @@ Pontos:
 - Arquivo: `data/app.db` (SQLite). Criado e migrado automaticamente no import de `main.py`.
 - Arquivos sensíveis em `data/`: `session_secret.key`, `vapid_private.pem`, `vapid_public.txt`.
   Apagar as chaves VAPID obriga a reativar push em todos os dispositivos.
+
+## Cliente Flutter / API mobile
+
+- `mobile/` é cliente Flutter Android/iOS do mesmo backend e banco. Consulte `docs/mobile.md`.
+- `app/api/v1/` mantém REST `/api/v1` separado das rotas HTML. Dependências Bearer validam
+  sessão, expiração, usuário ativo e impressão do hash de senha. Cookies não autorizam a API.
+- `app/security.py` contém as funções PBKDF2 originais, importadas também por `main.py`.
+- `app/services/maintenance.py` contém regras compartilhadas de dashboard, segmentos,
+  auto-reset, status de salas e MAC. Evite duplicá-las no cliente ou nas rotas.
+- Atendimento usa `crud.take_ticket` / `crud.close_ticket`, com UPDATE condicional e broadcast
+  após commit. Não substituir por leitura de status seguida de gravação sem condição.
+- Tabelas `mobile_sessions` e `fcm_devices` são criadas via metadata. A coluna
+  `tickets.resolution_note` é adicionada pela migração existente e separa nota de resolução
+  de `diagnostics_json` (diagnóstico do PC).
+- `/ws/v1/tickets` usa Authorization no handshake e revalida sessão durante conexão.
+  `/ws/tickets` mantém cookie do site. Ambos recebem eventos do mesmo manager.
+- `app/fcm.py` envia push nativo após commit do chamado TCP. Coexiste com `push.py`/VAPID.
+  Firebase é opcional até configuração externa; chaves privadas nunca entram no Git/APK.
+- DTOs em `app/schemas/` nunca expõem `password_hash` ou `hoptodesk_password`.
+- `MANUTENCAO_DATA_DIR` muda diretório de banco/chaves para testes. Padrão permanece `data/`.
+  Nunca importar `app.main` em teste antes de isolar essa variável: import migra o banco.
+- Testes Python em `tests/`, dependências em `requirements-dev.txt`. Flutter: analyze/test.

@@ -76,6 +76,8 @@ Estados de rede usam loading, vazio, erro com nova tentativa e pull-to-refresh. 
 
 ## Testes e limites
 
+Validação desta entrega: `flutter analyze` sem problemas, **39 testes aprovados** e `flutter build apk --debug` concluído. Uma cópia local está em `dist/mobile/manutencao-ti-debug.apk` na raiz do repositório, fora do versionamento. Resultados completos em [relatório](../docs/mobile-implementation-report.md).
+
 `test/core_test.dart` cobre autenticação, estado, armazenamento, modelos, timeout de envio/leitura, TLS, erros e HTTP 401 atrasado. `test/widget_test.dart` cobre entrada, navegação, atendimento, limpeza de rotas após expiração, destino de notificação e layout de 320 px com texto ampliado. `test/push_test.dart` verifica registro Bearer, permissão negada, logout idempotente e cancelamento de registro atrasado na troca de servidor.
 
 Testes usam HTTP e dispositivo FCM simulados. Push real depende de projeto/credenciais Firebase/APNs, permissões, internet, Google Play Services, políticas de energia e entrega do sistema operacional. Android force-stop e restrições do iOS podem exigir reabrir app; não se promete entrega após fechamento forçado. Valide a matriz em hardware antes do uso em produção.

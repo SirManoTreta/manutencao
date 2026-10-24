@@ -48,6 +48,8 @@ chamados_server_cache*.json
 # Generated packages (keep dist installation scripts and instructions)
 *.exe
 *.msi
+*.apk
+*.aab
 build/
 
 # IDE and OS
