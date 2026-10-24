@@ -55,6 +55,13 @@ class SessionController extends ChangeNotifier {
     } catch (_) {
       user = null;
       api.token = null;
+      for (final key in ['token', 'user']) {
+        try {
+          await storage.delete(key);
+        } catch (_) {
+          /* Storage may be unavailable; retain original server binding. */
+        }
+      }
       error = 'Não foi possível restaurar a sessão. Entre novamente.';
     }
     notifyListeners();
@@ -67,8 +74,17 @@ class SessionController extends ChangeNotifier {
     notice = null;
     notifyListeners();
     try {
-      api.baseUrl = ApiClient.normalizeBaseUrl(server);
-      await storage.write('server', api.baseUrl);
+      final nextServer = ApiClient.normalizeBaseUrl(server);
+      if (api.baseUrl != nextServer) {
+        final hadCredentials = api.token != null || user != null;
+        api.token = null;
+        user = null;
+        if (hadCredentials) {
+          generation++;
+          notifyListeners();
+        }
+      }
+      api.baseUrl = nextServer;
       final response = object(
         await api.request(
           'POST',
@@ -79,8 +95,14 @@ class SessionController extends ChangeNotifier {
       );
       final newToken = response['access_token'] as String;
       final newUser = AppUser.fromJson(object(response['user']));
-      await storage.write('token', newToken);
+      // Never associate an old token with a new origin, including partial writes.
+      // Failed logins retain the original persisted server; successful logins
+      // erase old credentials before changing origin and write the new token last.
+      await storage.delete('token');
+      await storage.delete('user');
+      await storage.write('server', nextServer);
       await storage.write('user', jsonEncode(newUser.toJson()));
+      await storage.write('token', newToken);
       api.token = newToken;
       user = newUser;
       generation++;

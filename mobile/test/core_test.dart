@@ -264,6 +264,48 @@ void main() {
       expect(session.error, contains('restaurar'));
     });
 
+    test(
+      'cache corrompido e login falho não enviam token antigo a nova origem',
+      () async {
+        final storage = MemorySessionStorage({
+          'server': 'https://escola-original.example',
+          'token': 'token-da-escola-original',
+          'user': '{json inválido',
+        });
+        final requests = <http.Request>[];
+        final api = ApiClient(
+          client: MockClient((request) async {
+            requests.add(request);
+            expect(request.url.host, 'outro-servidor.example');
+            expect(request.url.path, '/api/v1/auth/login');
+            expect(request.headers['Authorization'], isNull);
+            return _json({'detail': 'Usuário ou senha inválidos.'}, 401);
+          }),
+        );
+        final session = SessionController(api, storage);
+        addTearDown(api.dispose);
+        addTearDown(session.dispose);
+
+        await session.restore();
+        expect(storage.values['token'], isNull);
+        expect(storage.values['user'], isNull);
+        expect(
+          await session.login(
+            'https://outro-servidor.example',
+            'tecnico',
+            'errada',
+          ),
+          isFalse,
+        );
+        expect(storage.values['server'], 'https://escola-original.example');
+        final restarted = SessionController(api, storage);
+        addTearDown(restarted.dispose);
+        await restarted.restore();
+        expect(restarted.authenticated, isFalse);
+        expect(requests, hasLength(1));
+      },
+    );
+
     test('401 atrasado não invalida token de login mais recente', () async {
       final pending = Completer<http.Response>();
       final started = Completer<void>();
