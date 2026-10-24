@@ -11,3 +11,4 @@ pywebpush
 cryptography
 tzdata
 starlette
+firebase-admin>=7.1,<8

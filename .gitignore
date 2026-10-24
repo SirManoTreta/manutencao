@@ -71,3 +71,12 @@ Desktop.ini
 **/android/key.properties
 **/ios/Pods/
 **/ios/.symlinks/
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/flutter_export_environment.sh
+**/ios/Runner/GeneratedPluginRegistrant.*
+**/android/app/google-services.json
+**/ios/Runner/GoogleService-Info.plist
+**/firebase_options.dart
+**/firebase-service-account*.json
+**/*firebase-adminsdk*.json
+**/service-account*.json

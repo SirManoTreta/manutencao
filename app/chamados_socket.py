@@ -23,6 +23,7 @@ from .database import SessionLocal
 from .models import Machine, Ticket, MachineHeartbeat
 from .realtime import broadcast_from_thread
 from .push import enqueue_push, build_ticket_push_payload
+from .fcm import enqueue_ticket_push
 
 
 DEFAULT_HOST = os.getenv("CHAMADOS_HOST", "0.0.0.0")
@@ -148,6 +149,8 @@ class _TicketTCPHandler(socketserver.BaseRequestHandler):
             broadcast_from_thread(payload)
             # Push do sistema (Service Worker) — só vai disparar se o cliente tiver subscription ativa
             enqueue_push(build_ticket_push_payload(pc_name=pc_name, problem=created_problem or "Novo chamado", ticket_id=created_ticket_id))
+            # FCM nativo coexiste com WebSocket e Web Push; só após persistir o chamado.
+            enqueue_ticket_push(created_ticket_id)
 
 
 class _ThreadingTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
