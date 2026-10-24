@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import Any
+from typing import Any, Awaitable, Callable
 
 from fastapi import WebSocket
 
@@ -19,16 +19,20 @@ from fastapi import WebSocket
 class ConnectionManager:
     def __init__(self) -> None:
         self._connections: set[WebSocket] = set()
+        self._authorizers: dict[WebSocket, Callable[[], Awaitable[bool]]] = {}
         self._lock = asyncio.Lock()
 
-    async def connect(self, ws: WebSocket) -> None:
+    async def connect(self, ws: WebSocket, authorize: Callable[[], Awaitable[bool]] | None = None) -> None:
         await ws.accept()
         async with self._lock:
             self._connections.add(ws)
+            if authorize:
+                self._authorizers[ws] = authorize
 
     async def disconnect(self, ws: WebSocket) -> None:
         async with self._lock:
             self._connections.discard(ws)
+            self._authorizers.pop(ws, None)
 
     async def broadcast(self, payload: dict[str, Any]) -> None:
         data = json.dumps(payload, ensure_ascii=False)
@@ -37,6 +41,11 @@ class ConnectionManager:
 
         for ws in targets:
             try:
+                authorize = self._authorizers.get(ws)
+                if authorize and not await authorize():
+                    await ws.close(code=1008)
+                    await self.disconnect(ws)
+                    continue
                 await ws.send_text(data)
             except Exception:
                 # conexão morreu, remove

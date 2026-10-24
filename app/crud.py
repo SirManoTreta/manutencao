@@ -1,8 +1,35 @@
 from datetime import datetime
 from sqlalchemy.orm import Session
-from sqlalchemy import select, func, or_
+from sqlalchemy import select, func, or_, update
 from .models import Machine, MachinePeripheral, User, MachineAudit, Ticket, MachineHeartbeat
 from .constants import peripherals_for_profile
+from .realtime import broadcast_from_thread
+
+
+def take_ticket(db: Session, ticket_id: int, actor_username: str) -> bool:
+    """Uma única atualização condicional decide quem assume, também entre processos."""
+    result = db.execute(
+        update(Ticket).where(Ticket.id == ticket_id, Ticket.status == "OPEN").values(
+            status="IN_PROGRESS", assigned_at=datetime.utcnow(), assigned_by=actor_username,
+        )
+    )
+    db.commit()
+    if result.rowcount:
+        broadcast_from_thread({"type": "ticket_taken", "ticket_id": ticket_id, "assigned_by": actor_username})
+    return bool(result.rowcount)
+
+
+def close_ticket(db: Session, ticket_id: int, actor_username: str, diagnosis: str | None = None) -> bool:
+    values = {"status": "CLOSED", "closed_at": datetime.utcnow(), "closed_by": actor_username}
+    if diagnosis is not None:
+        values["resolution_note"] = diagnosis.strip() or None
+    result = db.execute(
+        update(Ticket).where(Ticket.id == ticket_id, Ticket.status == "IN_PROGRESS").values(**values)
+    )
+    db.commit()
+    if result.rowcount:
+        broadcast_from_thread({"type": "ticket_closed", "ticket_id": ticket_id})
+    return bool(result.rowcount)
 
 
 # ----------------- Machines -----------------

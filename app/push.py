@@ -31,12 +31,10 @@ from cryptography.hazmat.primitives.serialization import (
     Encoding, PrivateFormat, NoEncryption
 )
 
-from .database import SessionLocal
+from .database import SessionLocal, DATA_DIR
 from .models import PushSubscription
 
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATA_DIR = os.path.join(BASE_DIR, "data")
 os.makedirs(DATA_DIR, exist_ok=True)
 
 VAPID_PRIVATE_PATH = os.path.join(DATA_DIR, "vapid_private.pem")

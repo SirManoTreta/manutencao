@@ -1,14 +1,10 @@
 import os
 import io
-import base64
-import hashlib
-import hmac
 import secrets
 import asyncio
 import re
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone, timedelta
-from zoneinfo import ZoneInfo
+from datetime import datetime, timezone
 from starlette.middleware.sessions import SessionMiddleware
 from datetime import date
 from fastapi import FastAPI, Request, Depends, Form, WebSocket
@@ -17,7 +13,7 @@ from fastapi.responses import RedirectResponse, HTMLResponse, FileResponse, JSON
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
-from sqlalchemy import text, update
+from sqlalchemy import text
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
@@ -25,7 +21,7 @@ from .models import Machine, User, Ticket, MachineHeartbeat, PushSubscription
 from .reporting import build_xlsm_report
 from collections import defaultdict
 
-from .database import Base, engine, get_db
+from .database import Base, engine, get_db, DATA_DIR
 from . import crud
 from .constants import PROFILE_A, PROFILE_B, PROFILE_C, peripherals_for_profile
 
@@ -34,29 +30,14 @@ from .chamados_socket import start_chamados_server, stop_chamados_server
 from .realtime import set_main_loop, manager, broadcast_from_thread
 from .push import ensure_vapid_keys, get_public_key, upsert_subscription, delete_subscription
 
+from .security import hash_password, verify_password
+from .services.maintenance import (
+    derive_segment, _today_br, apply_auto_reset_checks, worst_status,
+    normalize_mac as _normalize_mac, build_dashboard_context as _build_dashboard_context,
+    BR_TZ, AUTO_RESET_DAYS_BY_STATUS, ONLINE_THRESHOLD_SECONDS,
+)
+
 Base.metadata.create_all(bind=engine)
-
-def hash_password(password: str, iterations: int = 200_000) -> str:
-    salt = secrets.token_bytes(16)
-    dk = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, iterations)
-    return "pbkdf2_sha256$%d$%s$%s" % (
-        iterations,
-        base64.urlsafe_b64encode(salt).decode("ascii"),
-        base64.urlsafe_b64encode(dk).decode("ascii"),
-    )
-
-def verify_password(password: str, stored: str) -> bool:
-    try:
-        algo, it_s, salt_b64, hash_b64 = stored.split("$", 3)
-        if algo != "pbkdf2_sha256":
-            return False
-        iterations = int(it_s)
-        salt = base64.urlsafe_b64decode(salt_b64.encode("ascii"))
-        expected = base64.urlsafe_b64decode(hash_b64.encode("ascii"))
-        dk = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, iterations)
-        return hmac.compare_digest(dk, expected)
-    except Exception:
-        return False
 
 
 # Migração simples (SQLite) para colunas novas
@@ -137,6 +118,8 @@ def _migrate_sqlite():
             conn.execute(text("ALTER TABLE tickets ADD COLUMN assigned_at DATETIME"))
         if "assigned_by" not in ticket_cols:
             conn.execute(text("ALTER TABLE tickets ADD COLUMN assigned_by VARCHAR(80)"))
+        if "resolution_note" not in ticket_cols:
+            conn.execute(text("ALTER TABLE tickets ADD COLUMN resolution_note TEXT"))
         conn.commit()
 
 _migrate_sqlite()
@@ -149,14 +132,6 @@ templates = Jinja2Templates(directory=os.path.join(APP_DIR, "templates"))
 # A aplicação salva timestamps em UTC (datetime.utcnow). Para exibição no site,
 # convertemos para America/Sao_Paulo. Isso evita confusão quando o servidor
 # está em UTC mas os usuários esperam horário local.
-try:
-    # Em algumas instalações do Windows, a base de timezones IANA não vem no sistema.
-    # O Python tenta usar o pacote "tzdata" nesses casos. Se não estiver instalado,
-    # fazemos fallback para UTC-3 fixo (Brasília).
-    BR_TZ = ZoneInfo("America/Sao_Paulo")
-except Exception:
-    BR_TZ = timezone(timedelta(hours=-3))
-
 
 def _as_utc(dt: datetime) -> datetime:
     """Garante datetime com tzinfo UTC.
@@ -204,63 +179,8 @@ templates.env.filters["time_br"] = fmt_time_br
 templates.env.filters["date_br"] = fmt_date_br
 
 
-def derive_segment(room_or_name: str | None, profile: str | None) -> str:
-    """Deriva um 'segmento' educacional simples a partir do nome da sala/PC.
-
-    Retorna chaves estáveis para filtro: INFANTIL, FUND1, FUND2, EM, ADMIN, OUTRO.
-    """
-    prof = (profile or "").strip().upper()
-    if prof == "C":
-        return "ADMIN"
-
-    txt = (room_or_name or "").strip().upper()
-    # Normalização leve de acentos mais comuns
-    txt = (
-        txt.replace("Ç", "C")
-        .replace("Ã", "A")
-        .replace("Á", "A")
-        .replace("Â", "A")
-        .replace("É", "E")
-        .replace("Ê", "E")
-        .replace("Í", "I")
-        .replace("Ó", "O")
-        .replace("Ô", "O")
-        .replace("Õ", "O")
-        .replace("Ú", "U")
-    )
-
-    if "INFANTIL" in txt or re.search(r"\bINF\b", txt):
-        return "INFANTIL"
-
-    # Ensino Médio: 1ºEM / 2ºEM / 3ºEM | 1ª SÉRIE / 2ª SÉRIE / 3ª SÉRIE
-    if re.search(r"\bENSINO\s+MEDIO\b", txt):
-        return "EM"
-    m_em = re.search(r"(\d+)\s*[ºª]?\s*(EM|SERIE|S[EÉ]RIE)", txt)
-    if m_em:
-        return "EM"
-
-    # Fundamental por 'ANO'
-    m_fund = re.search(r"(\d+)\s*[ºª]?\s*ANO", txt)
-    if m_fund:
-        n = int(m_fund.group(1))
-        if 1 <= n <= 5:
-            return "FUND1"
-        if 6 <= n <= 9:
-            return "FUND2"
-
-    # Fallback por perfil
-    if prof == "A":
-        # Perfil A = Infantil 2–5 + 1º–4º (na dúvida, Fund1)
-        return "FUND1"
-    if prof == "B":
-        # Perfil B = 5º–9º + EM (na dúvida, Fund2)
-        return "FUND2"
-
-    return "OUTRO"
-
 STATIC_DIR = os.path.join(APP_DIR, "static")
 
-DATA_DIR = os.path.join(os.path.dirname(APP_DIR), "data")
 os.makedirs(DATA_DIR, exist_ok=True)
 
 SECRET_FILE = os.path.join(DATA_DIR, "session_secret.key")
@@ -301,6 +221,12 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Controle de Manutenção - Computadores", lifespan=lifespan)
 
+from .api.v1.router import router as mobile_api_router
+from .api.v1.realtime import router as mobile_ws_router
+
+app.include_router(mobile_api_router)
+app.include_router(mobile_ws_router)
+
 
 # ===== Auto-reset de Vistoria / Checkup =====
 # Regras:
@@ -310,60 +236,9 @@ app = FastAPI(title="Controle de Manutenção - Computadores", lifespan=lifespan
 #
 # Importante: o sistema NÃO apaga as datas (last_inspection_date/last_checkup_date).
 # Ele apenas desmarca os checkboxes quando o prazo vence.
-AUTO_RESET_DAYS_BY_STATUS = {
-    "OK": 7,
-    "ATTENTION": 2,
-    "URGENT": 1,
-}
-
 # Frequência do loop (segundos). 3600 = 1 hora.
 # Ajustável por env: AUTO_RESET_LOOP_SECONDS
 AUTO_RESET_LOOP_SECONDS = int(os.getenv("AUTO_RESET_LOOP_SECONDS", "3600"))
-
-
-def _today_br() -> date:
-    """Data corrente no fuso de Brasília."""
-    try:
-        return datetime.now(BR_TZ).date()
-    except Exception:
-        return datetime.utcnow().date()
-
-
-def apply_auto_reset_checks(db: Session) -> int:
-    """Desmarca inspected/checkup_done quando vencidos, conforme room_status.
-
-    Retorna quantas marcações foram desfeitas.
-    """
-    today = _today_br()
-    # Observação: não alteramos updated_by/updated_at para não "atropelar" a auditoria humana.
-
-    stmt = select(Machine).where((Machine.inspected == True) | (Machine.checkup_done == True))  # noqa: E712
-    machines = list(db.execute(stmt).scalars().all())
-
-    changed = 0
-    for m in machines:
-        status = (m.room_status or "OK").strip().upper() or "OK"
-        days_limit = AUTO_RESET_DAYS_BY_STATUS.get(status, 7)
-
-        dirty = False
-        if m.inspected and m.last_inspection_date:
-            delta = (today - m.last_inspection_date).days
-            if delta >= days_limit:
-                m.inspected = False
-                dirty = True
-                changed += 1
-
-        if m.checkup_done and m.last_checkup_date:
-            delta = (today - m.last_checkup_date).days
-            if delta >= days_limit:
-                m.checkup_done = False
-                dirty = True
-                changed += 1
-
-    if changed:
-        db.commit()
-
-    return changed
 
 
 async def _auto_reset_loop():
@@ -404,7 +279,7 @@ async def auth_guard(request: Request, call_next):
     request.state.user = None
     path = request.url.path
 
-    if path.startswith("/static") or path in PUBLIC_PATHS:
+    if path.startswith("/api/v1/") or path.startswith("/static") or path in PUBLIC_PATHS:
         return await call_next(request)
 
     user_id = request.session.get("user_id")
@@ -463,12 +338,6 @@ async def push_unsubscribe(request: Request, db: Session = Depends(get_db)):
 from sqlalchemy import select
 from collections import defaultdict
 
-STATUS_ORDER = {"OK": 0, "ATTENTION": 1, "URGENT": 2}
-
-def worst_status(statuses: list[str]) -> str:
-    if not statuses:
-        return "OK"
-    return max(statuses, key=lambda s: STATUS_ORDER.get(s, 0))
 
 @app.get("/rooms", response_class=HTMLResponse)
 def rooms_list(request: Request, db: Session = Depends(get_db)):
@@ -519,35 +388,6 @@ def _safe_int(value, default=0):
         return default
 
 
-def _normalize_mac(value: str | None) -> str | None:
-    """Normaliza MAC para o formato AA:BB:CC:DD:EE:FF quando possível.
-
-    - Aceita: AA-BB-CC-DD-EE-FF, AABB.CCDD.EEFF, aabbccddeeff
-    - Se não bater formato conhecido, devolve o texto 'limpo' (maiúsculo) sem bloquear o salvamento.
-    """
-    if not value:
-        return None
-    s = (value or "").strip().upper()
-    if not s:
-        return None
-
-    # Formato com pontos (Cisco): AABB.CCDD.EEFF
-    if re.fullmatch(r"[0-9A-F]{4}\.[0-9A-F]{4}\.[0-9A-F]{4}", s):
-        raw = s.replace(".", "")
-        return ":".join(raw[i:i+2] for i in range(0, 12, 2))
-
-    # Formato com separador: AA:BB:CC:DD:EE:FF ou AA-BB-CC-DD-EE-FF
-    if re.fullmatch(r"([0-9A-F]{2}[:-]){5}[0-9A-F]{2}", s):
-        return s.replace("-", ":")
-
-    # Formato puro: AABBCCDDEEFF
-    raw = s.replace(":", "").replace("-", "").replace(".", "")
-    if re.fullmatch(r"[0-9A-F]{12}", raw):
-        return ":".join(raw[i:i+2] for i in range(0, 12, 2))
-
-    return s
-
-
 def _parse_peripherals_from_form(form: dict, profile: str):
     state = {}
     defs = peripherals_for_profile(profile)
@@ -573,99 +413,6 @@ def _parse_peripherals_from_form(form: dict, profile: str):
         state[p.code] = {"present": present, "tested_working": tested, "quantity": qty}
 
     return state
-
-
-def _dashboard_bar_rows(label_map: dict[str, int], total: int):
-    rows = []
-    for label, count in label_map.items():
-        percent = round((count * 100 / total), 1) if total else 0
-        rows.append({"label": label, "count": count, "percent": percent})
-    return rows
-
-
-def _build_dashboard_context(db: Session):
-    apply_auto_reset_checks(db)
-
-    machines = crud.list_machines(db)
-    for m in machines:
-        m.segment = derive_segment(m.room_name or m.machine_name, m.profile)
-
-    total_machines = len(machines)
-    rooms_count = len({(m.room_name or "").strip() for m in machines if (m.room_name or "").strip()})
-
-    status_counts = {
-        "OK": len([m for m in machines if m.room_status == "OK"]),
-        "Atenção": len([m for m in machines if m.room_status == "ATTENTION"]),
-        "Urgente": len([m for m in machines if m.room_status == "URGENT"]),
-    }
-
-    profile_counts = {
-        "Perfil A": len([m for m in machines if m.profile == "A"]),
-        "Perfil B": len([m for m in machines if m.profile == "B"]),
-        "Perfil C": len([m for m in machines if m.profile == "C"]),
-    }
-
-    segment_counts = {
-        "Infantil": len([m for m in machines if getattr(m, "segment", None) == "INFANTIL"]),
-        "Fundamental 1": len([m for m in machines if getattr(m, "segment", None) == "FUND1"]),
-        "Fundamental 2": len([m for m in machines if getattr(m, "segment", None) == "FUND2"]),
-        "Ensino Médio": len([m for m in machines if getattr(m, "segment", None) == "EM"]),
-        "Administrativo": len([m for m in machines if getattr(m, "segment", None) == "ADMIN"]),
-        "Outros": len([m for m in machines if getattr(m, "segment", None) == "OUTRO"]),
-    }
-
-    room_rank = {"OK": 0, "ATTENTION": 1, "URGENT": 2}
-    room_worst = {}
-    for m in machines:
-        room = (m.room_name or "").strip()
-        if not room:
-            continue
-        current = room_worst.get(room, "OK")
-        if room_rank.get(m.room_status or "OK", 0) > room_rank.get(current, 0):
-            room_worst[room] = m.room_status or "OK"
-        elif room not in room_worst:
-            room_worst[room] = m.room_status or "OK"
-
-    attention_rooms = len([status for status in room_worst.values() if status == "ATTENTION"])
-    urgent_rooms = len([status for status in room_worst.values() if status == "URGENT"])
-
-    tickets = list(db.execute(select(Ticket).order_by(Ticket.created_at.desc())).scalars().all())
-    open_tickets = len([t for t in tickets if t.status != "CLOSED"])
-    in_progress_tickets = len([t for t in tickets if t.status == "IN_PROGRESS"])
-    closed_tickets = len([t for t in tickets if t.status == "CLOSED"])
-    recent_tickets = tickets[:5]
-
-    pending_inspections = len([m for m in machines if not m.inspected])
-    pending_checkups = len([m for m in machines if not m.checkup_done])
-
-    heartbeats = list(db.execute(select(MachineHeartbeat)).scalars().all())
-    now = datetime.utcnow()
-    online_count = len([hb for hb in heartbeats if hb.last_seen and (now - hb.last_seen).total_seconds() <= ONLINE_THRESHOLD_SECONDS])
-
-    recent_machines = sorted(
-        machines,
-        key=lambda m: (m.updated_at or m.created_at or datetime.min),
-        reverse=True,
-    )[:5]
-
-    return {
-        "total_machines": total_machines,
-        "rooms_count": rooms_count,
-        "open_tickets": open_tickets,
-        "in_progress_tickets": in_progress_tickets,
-        "closed_tickets": closed_tickets,
-        "pending_inspections": pending_inspections,
-        "pending_checkups": pending_checkups,
-        "online_count": online_count,
-        "total_heartbeats": len(heartbeats),
-        "attention_rooms": attention_rooms,
-        "urgent_rooms": urgent_rooms,
-        "status_rows": _dashboard_bar_rows(status_counts, total_machines),
-        "profile_rows": _dashboard_bar_rows(profile_counts, total_machines),
-        "segment_rows": _dashboard_bar_rows(segment_counts, total_machines),
-        "recent_machines": recent_machines,
-        "recent_tickets": recent_tickets,
-    }
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -761,7 +508,6 @@ def machines_list(
 # ----------------- Chamados (Professor.py) -----------------
 
 
-ONLINE_THRESHOLD_SECONDS = int(os.getenv("ONLINE_THRESHOLD_SECONDS", "15"))
 TICKET_STATUSES = {"OPEN", "IN_PROGRESS", "CLOSED"}
 
 
@@ -813,48 +559,13 @@ def tickets_list(
 
 @app.post("/tickets/{ticket_id}/take")
 def tickets_take(ticket_id: int, request: Request, db: Session = Depends(get_db)):
-    """Assume atomicamente um chamado ainda aberto.
-
-    O UPDATE condicional evita que duas pessoas assumam o mesmo chamado ao
-    mesmo tempo. Somente a primeira transição OPEN -> IN_PROGRESS prevalece.
-    """
-    assigned_by = request.state.user.username if request.state.user else None
-    assigned_at = datetime.utcnow()
-    result = db.execute(
-        update(Ticket)
-        .where(Ticket.id == ticket_id, Ticket.status == "OPEN")
-        .values(
-            status="IN_PROGRESS",
-            assigned_at=assigned_at,
-            assigned_by=assigned_by,
-        )
-    )
-    db.commit()
-
-    if result.rowcount:
-        broadcast_from_thread(
-            {
-                "type": "ticket_taken",
-                "ticket_id": ticket_id,
-                "assigned_by": assigned_by,
-            }
-        )
-
+    crud.take_ticket(db, ticket_id, request.state.user.username)
     return RedirectResponse(url="/tickets?status=IN_PROGRESS", status_code=303)
 
 
 @app.post("/tickets/{ticket_id}/close")
 def tickets_close(ticket_id: int, request: Request, db: Session = Depends(get_db)):
-    t = db.get(Ticket, ticket_id)
-    ticket_closed = False
-    if t and t.status == "IN_PROGRESS":
-        t.status = "CLOSED"
-        t.closed_at = datetime.utcnow()
-        t.closed_by = request.state.user.username if request.state.user else None
-        db.commit()
-        ticket_closed = True
-    if ticket_closed:
-        broadcast_from_thread({"type": "ticket_closed", "ticket_id": ticket_id})
+    crud.close_ticket(db, ticket_id, request.state.user.username)
     return RedirectResponse(url="/tickets?status=IN_PROGRESS", status_code=303)
 
 
