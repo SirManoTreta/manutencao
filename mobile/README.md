@@ -39,6 +39,8 @@ flutter build apk --debug
 
 O APK de debug aparece em `build/app/outputs/flutter-apk/app-debug.apk`. Publicação exige configurar chave de assinatura de produção; a configuração inicial de release gerada pelo Flutter usa assinatura de desenvolvimento. iOS precisa de macOS/Xcode e assinatura Apple. Não foi validado em hardware físico durante a implementação.
 
+O projeto desativa compilação incremental Kotlin para suportar Windows com Pub Cache e repositório em discos diferentes. Isso evita `this and base files have different roots`; recompilações Kotlin podem demorar mais. A propriedade usada está na [documentação Kotlin](https://kotlinlang.org/docs/gradle-compilation-and-caches.html).
+
 ## Configurar Firebase no Android
 
 1. Crie projeto no [Firebase Console](https://console.firebase.google.com/).
